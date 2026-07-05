@@ -1,0 +1,49 @@
+// Prisma schema for AB Kreative lead generation platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id              String   @id @default(cuid())
+  title           String
+  description     String
+  category        String   // DESIGN | FITOUT | CREDIT_CARD | LOGISTICS | UAE_APPROVALS | DUBAI_BUSINESS_SETUP
+  subcategory     String?  // e.g. "Interior Design", "Brand Identity", "Municipality Approval", "DCD", "Freight Forwarding"
+  country         String   // Two-letter country code (worldwide)
+  city            String?
+  region          String?  // e.g. "GCC", "Europe", "Asia Pacific", "North America", "MENA"
+  budgetMin       Int
+  budgetMax       Int
+  currency        String   @default("USD")
+  timeline        String
+  skills          String   // comma-separated
+  source          String   @default("direct") // "direct", "website_scraped", "referral", "linkedin", "freelance_platform", "government_portal", "trade_show"
+  sourceUrl       String?  // URL where the lead was found
+  clientName      String
+  clientCompany   String?
+  clientEmail     String
+  clientPhone     String?
+  clientAddress   String?  // Full address of the client
+  clientLinkedin  String?  // LinkedIn profile URL
+  clientWebsite   String?  // Company/personal website
+  experienceReq   String?
+  projectType     String?
+  status          String   @default("OPEN") // OPEN | IN_PROGRESS | CLOSED
+  urgent          Boolean  @default(false)
+  featured        Boolean  @default(false)
+  views           Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@index([country])
+  @@index([region])
+  @@index([status])
+  @@index([source])
+}
