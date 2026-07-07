@@ -1,30 +1,28 @@
-import { NextResponse } from 'next/server'
-import { initTursoClient, isTursoReady, getTursoError } from '@/lib/turso-client'
+import { NextResponse } from 'next/server';
+import { db, getDbMode } from '@/lib/db';
 
 export async function GET() {
-  // Check Turso direct connection
-  if (process.env.TURSO_DATABASE_URL) {
-    const ready = await initTursoClient()
-    if (ready) {
-      return NextResponse.json({
-        turso: true,
-        connected: true,
-        database: 'turso (direct)',
-        method: 'libsql-client',
-      })
-    }
-    return NextResponse.json({
-      turso: true,
-      connected: false,
-      database: 'turso (direct)',
-      error: getTursoError(),
-    }, { status: 503 })
-  }
+  try {
+    // Live connection test
+    await db.$queryRaw`SELECT 1`;
+    const mode = getDbMode();
 
-  return NextResponse.json({
-    turso: false,
-    connected: false,
-    database: 'none',
-    error: 'TURSO_DATABASE_URL not set',
-  }, { status: 503 })
+    return NextResponse.json(
+      { 
+        turso: mode === 'turso', 
+        local: mode === 'local', 
+        connected: true, 
+        database: mode 
+      },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      { 
+        connected: false, 
+        error: error?.message || 'Database connection failed' 
+      },
+      { status: 503 }
+    );
+  }
 }
