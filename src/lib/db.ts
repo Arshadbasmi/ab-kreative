@@ -1,21 +1,20 @@
 import { PrismaClient } from '@prisma/client';
-import { createClient } from '@libsql/client';
-import { PrismaLibSQL } from '@prisma/adapter-libsql';
+import { PrismaLibSql } from '@prisma/adapter-libsql';
 
 let dbMode = 'local';
 let isReady = false;
 
 const prismaClientSingleton = () => {
+  const databaseUrl = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+
   // Dynamic fallback check
-  if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
+  if (databaseUrl && databaseUrl.startsWith('libsql:') && process.env.TURSO_AUTH_TOKEN) {
     dbMode = 'turso';
-    
-    const libsql = createClient({
-      url: process.env.TURSO_DATABASE_URL,
+
+    const adapter = new PrismaLibSql({
+      url: databaseUrl,
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
-    
-    const adapter = new PrismaLibSQL(libsql);
     isReady = true;
     return new PrismaClient({ adapter });
   }
@@ -32,6 +31,6 @@ export const db = globalForPrisma.prismaGlobal ?? prismaClientSingleton();
 
 export const getDbMode = () => dbMode;
 export const getDbReady = () => isReady;
-
+export const isDbAvailable = () => isReady;
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prismaGlobal = 
 db;

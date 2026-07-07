@@ -1,11 +1,10 @@
-// Prisma schema for AB Kreative lead generation platform
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
