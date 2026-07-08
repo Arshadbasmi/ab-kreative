@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import seedLeads from '@/lib/seed-data.json'
 
 export const dynamic = 'force-dynamic'
 
-// Creates the Lead table and seeds 37 leads on Turso.
+// Creates the Lead table on Turso. Sample leads are inserted only with ?seed=true.
 // Each SQL statement is sent individually — Turso/libsql requires this.
 
 const CREATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS "Lead" (
@@ -56,7 +56,8 @@ function leadToInsert(l: (typeof seedLeads)[number]): string {
   return `INSERT OR IGNORE INTO "Lead" ("id","title","description","category","subcategory","country","city","region","budgetMin","budgetMax","currency","timeline","skills","source","sourceUrl","clientName","clientCompany","clientEmail","clientPhone","clientAddress","clientLinkedin","clientWebsite","experienceReq","projectType","status","urgent","featured","views","createdAt","updatedAt") VALUES (${esc(l.id)},${esc(l.title)},${esc(l.description)},${esc(l.category)},${esc(l.subcategory)},${esc(l.country)},${esc(l.city)},${esc(l.region)},${l.budgetMin},${l.budgetMax},${esc(l.currency)},${esc(l.timeline)},${esc(l.skills)},${esc(l.source)},${esc(l.sourceUrl)},${esc(l.clientName)},${esc(l.clientCompany)},${esc(l.clientEmail)},${esc(l.clientPhone)},${esc(l.clientAddress)},${esc(l.clientLinkedin)},${esc(l.clientWebsite)},${esc(l.experienceReq)},${esc(l.projectType)},${esc(l.status)},${l.urgent ? 1 : 0},${l.featured ? 1 : 0},${l.views || 0},${esc(l.createdAt)},${esc(l.updatedAt)})`
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const shouldSeed = new URL(request.url).searchParams.get('seed') === 'true'
   const tursoUrl = process.env.TURSO_DATABASE_URL
   const tursoToken = process.env.TURSO_AUTH_TOKEN
 
@@ -71,10 +72,7 @@ export async function POST() {
     const { createClient } = await import('@libsql/client')
     const libsql = createClient({ url: tursoUrl, authToken: tursoToken })
 
-    // 0. Drop old broken table (if exists from previous failed attempt)
-    try { await libsql.execute('DROP TABLE IF EXISTS "Lead"') } catch { /* ignore */ }
-
-    // 1. Create table (fresh)
+    // 1. Create table without deleting existing leads.
     await libsql.execute(CREATE_TABLE_SQL)
 
     // 2. Create indexes one by one
@@ -85,11 +83,16 @@ export async function POST() {
     // 3. Check if already seeded
     const result = await libsql.execute('SELECT COUNT(*) as c FROM "Lead"')
     const count = Number(result.rows[0]?.c)
-    if (count > 0) {
+    if (count > 0 || !shouldSeed) {
       return NextResponse.json({
         success: true,
-        message: `Database already has ${count} leads`,
+        message:
+          count > 0
+            ? `Database already has ${count} leads`
+            : 'Database table created. Sample leads were not inserted.',
         count,
+        inserted: 0,
+        seeded: false,
       })
     }
 
@@ -105,9 +108,10 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      message: 'Database created and seeded successfully',
+      message: 'Database created and sample leads seeded successfully',
       inserted,
       count: Number(verify.rows[0]?.c),
+      seeded: true,
     })
   } catch (error) {
     console.error('Setup DB error:', error)
@@ -118,6 +122,6 @@ export async function POST() {
   }
 }
 
-export async function GET() {
-  return POST()
+export async function GET(request: NextRequest) {
+  return POST(request)
 }

@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select'
 import { LeadCard } from './lead-card'
 import { LeadDetailDialog } from './lead-detail-dialog'
+import { toast } from '@/hooks/use-toast'
 import {
   COUNTRIES,
   CATEGORIES,
@@ -222,19 +223,62 @@ export function BrowseLeadsView() {
                 body: JSON.stringify({ category: activeCat, count: 5 }),
               })
               const json = await res.json()
+
+              if (!res.ok) {
+                throw new Error(json.error || 'Failed to generate leads')
+              }
+
               if (json.leads?.length > 0) {
+                let savedCount = 0
+                let failedCount = 0
+
                 // Save each generated lead to the database
                 for (const lead of json.leads) {
-                  await fetch('/api/save-lead', {
+                  const saveRes = await fetch('/api/save-lead', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(lead),
                   })
+
+                  if (saveRes.ok) {
+                    savedCount++
+                  } else {
+                    failedCount++
+                  }
                 }
-                mutate() // Refresh leads list
+
+                if (savedCount > 0) {
+                  mutate() // Refresh leads list
+                  toast({
+                    title: `${savedCount} verified lead${savedCount === 1 ? '' : 's'} saved`,
+                    description:
+                      failedCount > 0
+                        ? `${failedCount} generated lead${failedCount === 1 ? '' : 's'} could not be saved.`
+                        : `Rejected ${json.quality?.rejected || 0} unverified result${json.quality?.rejected === 1 ? '' : 's'}.`,
+                  })
+                } else {
+                  toast({
+                    title: 'Leads were found but not saved',
+                    description:
+                      'Check your database settings and run the database setup before generating again.',
+                    variant: 'destructive',
+                  })
+                }
+              } else {
+                toast({
+                  title: 'No verified leads found',
+                  description:
+                    json.message ||
+                    `Rejected ${json.quality?.rejected || 0} result${json.quality?.rejected === 1 ? '' : 's'} without real contact evidence.`,
+                })
               }
             } catch (e) {
               console.error('Generate leads error:', e)
+              toast({
+                title: 'AI generation failed',
+                description: e instanceof Error ? e.message : 'Please try again.',
+                variant: 'destructive',
+              })
             } finally {
               setGenerating(false)
             }

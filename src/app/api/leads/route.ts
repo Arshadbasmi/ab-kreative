@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, isDbAvailable, getDbReady } from '@/lib/db'
 import {
   initTursoClient,
-  isTursoReady,
   tursoFindLeads,
   tursoCreateLead,
 } from '@/lib/turso-client'
+import {
+  getLeadValidationIssues,
+  normalizeEmail,
+  normalizePublicUrl,
+} from '@/lib/lead-quality'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,12 +133,35 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    const source = String(body.source || 'direct')
+    const requiresContactVerification = ['website_scraped', 'ai_generated'].includes(source)
+
+    if (requiresContactVerification) {
+      const validationIssues = getLeadValidationIssues(body)
+      if (validationIssues.length > 0) {
+        return NextResponse.json(
+          { error: 'Lead failed contact verification', issues: validationIssues },
+          { status: 422 },
+        )
+      }
+    }
+
+    const normalizedEmail = requiresContactVerification
+      ? normalizeEmail(body.clientEmail)!
+      : body.clientEmail
+    const normalizedSourceUrl = requiresContactVerification
+      ? normalizePublicUrl(body.sourceUrl)
+      : body.sourceUrl || null
 
     // Try Turso first
     if (process.env.TURSO_DATABASE_URL) {
       const ready = await initTursoClient()
       if (ready) {
-        const lead = await tursoCreateLead(body)
+        const lead = await tursoCreateLead({
+          ...body,
+          clientEmail: normalizedEmail,
+          sourceUrl: normalizedSourceUrl,
+        })
         return NextResponse.json({ lead }, { status: 201 })
       }
     }
@@ -159,11 +186,11 @@ export async function POST(request: NextRequest) {
         currency: body.currency || 'USD',
         timeline: body.timeline,
         skills: body.skills,
-        source: body.source || 'direct',
-        sourceUrl: body.sourceUrl || null,
+        source,
+        sourceUrl: normalizedSourceUrl,
         clientName: body.clientName,
         clientCompany: body.clientCompany || null,
-        clientEmail: body.clientEmail,
+        clientEmail: normalizedEmail,
         clientPhone: body.clientPhone || null,
         clientAddress: body.clientAddress || null,
         clientLinkedin: body.clientLinkedin || null,

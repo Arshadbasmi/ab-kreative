@@ -61,6 +61,9 @@ mini-services/
 db/*.db
 db/*.db-shm
 db/*.db-wal
+prisma/db/*.db
+prisma/db/*.db-shm
+prisma/db/*.db-wal
 
 # scripts build artifacts
 .claude

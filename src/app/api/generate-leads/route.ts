@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
+import {
+  extractEmails,
+  extractPhones,
+  normalizeEmail,
+  normalizePublicUrl,
+} from '@/lib/lead-quality'
 
 export const dynamic = 'force-dynamic'
+
+type LeadCandidate = Record<string, unknown>
+
+type ContactEvidence = {
+  emails: string[]
+  phones: string[]
+  pageChecked: boolean
+}
+
+type SearchEvidence = {
+  emails: string[]
+  phones: string[]
+}
 
 // ---------------------------------------------------------------------------
 // In-memory rate limiter — max 10 calls per minute per IP
@@ -154,7 +173,7 @@ Each lead object MUST have these fields:
 - description: string (2-3 sentence project description)
 - category: string (must be "${category}")
 - subcategory: string (pick the most relevant subcategory for this category)
-- country: string (country code or full name, default "UAE" if unclear)
+- country: string (ISO-2 country code, default "AE" if unclear)
 - city: string (city name or null)
 - region: string (GCC / MENA / Europe / North America / Asia Pacific / South Asia / Africa / Latin America / Oceania)
 - budgetMin: number (minimum budget in USD, realistic)
@@ -163,19 +182,229 @@ Each lead object MUST have these fields:
 - timeline: string (one of: "1-2 weeks", "2-4 weeks", "4-6 weeks", "6-8 weeks", "8-12 weeks", "12+ weeks", "Monthly retainer")
 - skills: string (comma-separated list of relevant skills/services needed)
 - source: string ("website_scraped")
-- sourceUrl: string (the URL from the search result, or null)
-- clientName: string (contact person name, or "Not specified")
+- sourceUrl: string (the exact public URL from the search result)
+- clientName: string (contact person name, or "Not specified" only if no person is listed)
 - clientCompany: string (company name from the search result, or null)
-- clientEmail: string (email if found in results, or "contact@company.com" as placeholder)
-- clientPhone: string (phone if found, or null)
+- clientEmail: string (real email found verbatim in the provided results; never guess)
+- clientPhone: string (phone found verbatim in the provided results, or null)
 
 Rules:
 - Set realistic budgets based on the project scope (e.g., fitout projects $10K-$500K+, design $2K-$50K, finance leads $0 budget range, etc.)
 - Only extract leads that are genuinely implied by the search results
-- Do NOT fabricate fake company names, contacts, or project details
+- Do NOT fabricate fake company names, contacts, emails, phone numbers, URLs, or project details
+- Do NOT use placeholder or guessed emails such as contact@company.com, info@company.com, hello@company.com, sales@company.com, or any email inferred from a domain
+- Skip any lead that does not include both a traceable sourceUrl and a real contact email visible in the results
 - If no genuine leads can be extracted from the results, return an empty array []
-- Set "UAE" as the default country and "GCC" as the default region if location is unclear
+- Set "AE" as the default country and "GCC" as the default region if location is unclear
 - Return valid JSON only — no backticks, no markdown code fences`
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function asNumber(value: unknown, fallback: number): number {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : fallback
+}
+
+function unique(items: string[]): string[] {
+  return Array.from(new Set(items.filter(Boolean)))
+}
+
+function buildSearchEvidence(searchResults: Array<Record<string, unknown>>): Map<string, SearchEvidence> {
+  const evidenceByUrl = new Map<string, SearchEvidence>()
+
+  for (const result of searchResults) {
+    const url = normalizePublicUrl(result.url)
+    if (!url) continue
+
+    const resultText = [
+      result.name,
+      result.title,
+      result.snippet,
+      result.description,
+      result.url,
+    ]
+      .map((value) => (typeof value === 'string' ? value : ''))
+      .join('\n')
+
+    evidenceByUrl.set(url, {
+      emails: extractEmails(resultText),
+      phones: extractPhones(resultText),
+    })
+  }
+
+  return evidenceByUrl
+}
+
+function normalizeCountry(value: unknown): string {
+  const country = asString(value)
+  const aliases: Record<string, string> = {
+    UAE: 'AE',
+    'United Arab Emirates': 'AE',
+    Dubai: 'AE',
+    'Saudi Arabia': 'SA',
+    KSA: 'SA',
+    Qatar: 'QA',
+    Kuwait: 'KW',
+    Bahrain: 'BH',
+    Oman: 'OM',
+    'United Kingdom': 'GB',
+    UK: 'GB',
+    'United States': 'US',
+    USA: 'US',
+    India: 'IN',
+    Singapore: 'SG',
+    Australia: 'AU',
+  }
+
+  if (/^[A-Za-z]{2}$/.test(country)) return country.toUpperCase()
+  return aliases[country] || 'AE'
+}
+
+async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5_000)
+
+  try {
+    const response = await fetch(sourceUrl, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        accept: 'text/html,text/plain,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'user-agent': 'AB-Kreative-Lead-Verifier/1.0',
+      },
+    })
+
+    const contentType = response.headers.get('content-type') || ''
+    if (!response.ok || !/(html|text|json|xml)/i.test(contentType)) {
+      return { emails: [], phones: [], pageChecked: true }
+    }
+
+    const text = (await response.text()).slice(0, 500_000)
+    return {
+      emails: extractEmails(text),
+      phones: extractPhones(text),
+      pageChecked: true,
+    }
+  } catch {
+    return { emails: [], phones: [], pageChecked: false }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function selectVerifiedEmail(candidateEmail: unknown, evidenceEmails: string[]): string | null {
+  const claimedEmail = normalizeEmail(candidateEmail)
+
+  if (claimedEmail && evidenceEmails.includes(claimedEmail)) {
+    return claimedEmail
+  }
+
+  return evidenceEmails[0] || null
+}
+
+function selectVerifiedPhone(candidatePhone: unknown, evidencePhones: string[]): string | null {
+  const phone = asString(candidatePhone)
+  const phoneDigits = phone.replace(/\D/g, '')
+
+  if (!phoneDigits || phoneDigits.length < 8) {
+    return evidencePhones[0] || null
+  }
+
+  const verifiedPhone = evidencePhones.find((evidencePhone) => {
+    const evidenceDigits = evidencePhone.replace(/\D/g, '')
+    return evidenceDigits.includes(phoneDigits) || phoneDigits.includes(evidenceDigits)
+  })
+
+  return verifiedPhone || evidencePhones[0] || null
+}
+
+function buildVerifiedLead(
+  rawLead: LeadCandidate,
+  category: string,
+  sourceUrl: string,
+  clientEmail: string,
+  clientPhone: string | null,
+): LeadCandidate | null {
+  const title = asString(rawLead.title)
+  const description = asString(rawLead.description)
+  const skills = asString(rawLead.skills)
+
+  if (!title || !description || !skills) return null
+
+  const budgetMin = Math.max(0, Math.round(asNumber(rawLead.budgetMin, 0)))
+  const budgetMax = Math.max(budgetMin, Math.round(asNumber(rawLead.budgetMax, budgetMin)))
+
+  return {
+    ...rawLead,
+    title,
+    description,
+    category,
+    subcategory: asString(rawLead.subcategory) || null,
+    country: normalizeCountry(rawLead.country),
+    city: asString(rawLead.city) || null,
+    region: asString(rawLead.region) || 'GCC',
+    budgetMin,
+    budgetMax,
+    currency: 'USD',
+    timeline: asString(rawLead.timeline) || '2-4 weeks',
+    skills,
+    source: 'website_scraped',
+    sourceUrl,
+    clientName: asString(rawLead.clientName) || 'Not specified',
+    clientCompany: asString(rawLead.clientCompany) || null,
+    clientEmail,
+    clientPhone,
+  }
+}
+
+async function verifyLeadCandidates(
+  rawLeads: LeadCandidate[],
+  category: string,
+  searchEvidenceByUrl: Map<string, SearchEvidence>,
+): Promise<{ leads: LeadCandidate[]; rejected: number; pagesChecked: number }> {
+  const verifiedLeads: LeadCandidate[] = []
+  let rejected = 0
+  let pagesChecked = 0
+
+  for (const rawLead of rawLeads) {
+    const sourceUrl = normalizePublicUrl(rawLead.sourceUrl)
+    if (!sourceUrl) {
+      rejected++
+      continue
+    }
+
+    const pageEvidence = await getPageEvidence(sourceUrl)
+    if (pageEvidence.pageChecked) pagesChecked++
+
+    const searchEvidence = searchEvidenceByUrl.get(sourceUrl) || { emails: [], phones: [] }
+    const evidenceEmails = unique([...searchEvidence.emails, ...pageEvidence.emails])
+    const evidencePhones = unique([...searchEvidence.phones, ...pageEvidence.phones])
+    const clientEmail = selectVerifiedEmail(rawLead.clientEmail, evidenceEmails)
+
+    if (!clientEmail) {
+      rejected++
+      continue
+    }
+
+    const verifiedLead = buildVerifiedLead(
+      rawLead,
+      category,
+      sourceUrl,
+      clientEmail,
+      selectVerifiedPhone(rawLead.clientPhone, evidencePhones),
+    )
+
+    if (verifiedLead) {
+      verifiedLeads.push(verifiedLead)
+    } else {
+      rejected++
+    }
+  }
+
+  return { leads: verifiedLeads, rejected, pagesChecked }
 }
 
 // ---------------------------------------------------------------------------
@@ -203,10 +432,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const zai = await ZAI.create()
-    const allLeads: Record<string, unknown>[] = []
+    const allLeads: LeadCandidate[] = []
+    const queriesTried: string[] = []
+    let rejectedCandidates = 0
+    let pagesChecked = 0
 
     for (const query of searchQueries) {
       if (allLeads.length >= requestedCount) break
+      queriesTried.push(query)
 
       // Step 1: Web search for potential leads
       let searchResults: Array<Record<string, unknown>>
@@ -227,12 +460,13 @@ export async function POST(request: NextRequest) {
         .join('\n\n')
 
       if (!searchContext.trim()) continue
+      const searchEvidenceByUrl = buildSearchEvidence(searchResults)
 
       // Step 3: Use LLM to extract structured leads from search context
       const llmResponse = await zai.chat.completions.create({
         messages: [
           {
-            role: 'assistant',
+            role: 'system',
             content: buildSystemPrompt(category),
           },
           {
@@ -244,13 +478,14 @@ export async function POST(request: NextRequest) {
       })
 
       const content = llmResponse.choices?.[0]?.message?.content || '[]'
+      let parsedLeads: LeadCandidate[] = []
 
       // Step 4: Parse JSON from LLM response
       try {
         // Try direct parse first
         const parsed = JSON.parse(content)
         if (Array.isArray(parsed)) {
-          allLeads.push(...parsed)
+          parsedLeads = parsed as LeadCandidate[]
         }
       } catch {
         // Fallback: extract JSON array from markdown code fences or mixed content
@@ -259,7 +494,7 @@ export async function POST(request: NextRequest) {
           try {
             const parsed = JSON.parse(jsonMatch[0])
             if (Array.isArray(parsed)) {
-              allLeads.push(...parsed)
+              parsedLeads = parsed as LeadCandidate[]
             }
           } catch {
             // Unparseable — skip this batch
@@ -267,13 +502,30 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const verified = await verifyLeadCandidates(parsedLeads, category, searchEvidenceByUrl)
+      allLeads.push(...verified.leads)
+      rejectedCandidates += verified.rejected
+      pagesChecked += verified.pagesChecked
+
       if (allLeads.length >= requestedCount) break
     }
 
+    const seen = new Set<string>()
+    const dedupedLeads = allLeads.filter((lead) => {
+      const key = [
+        asString(lead.clientEmail).toLowerCase(),
+        asString(lead.sourceUrl).toLowerCase(),
+        asString(lead.title).toLowerCase(),
+      ].join('|')
+
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
     // Take only the requested count and attach metadata
-    const leads = allLeads.slice(0, requestedCount).map((lead, idx) => ({
+    const leads = dedupedLeads.slice(0, requestedCount).map((lead, idx) => ({
       ...lead,
-      source: 'ai_generated',
       category,
       id: `ai_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
     }))
@@ -282,7 +534,17 @@ export async function POST(request: NextRequest) {
       leads,
       count: leads.length,
       category,
-      queriesUsed: searchQueries.slice(0, Math.ceil(requestedCount / 2)),
+      queriesUsed: queriesTried,
+      quality: {
+        accepted: leads.length,
+        rejected: rejectedCandidates,
+        pagesChecked,
+        requirement: 'Verified public source URL and non-placeholder contact email found in search/page evidence.',
+      },
+      message:
+        leads.length === 0
+          ? 'No verified leads found. The app rejected results without a traceable source URL and real contact email.'
+          : undefined,
     })
   } catch (error) {
     console.error('Generate leads error:', error)

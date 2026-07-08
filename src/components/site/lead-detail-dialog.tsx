@@ -120,7 +120,8 @@ export function LeadDetailDialog({
   const cat = lead ? getCategoryMeta(lead.category) : null
   const catColor = lead ? getCatColorClass(lead.category) : null
 
-  const copyToClipboard = (text: string, field: string) => {
+  const copyToClipboard = (text: string | null | undefined, field: string) => {
+    if (!text) return
     navigator.clipboard.writeText(text)
     setCopiedField(field)
     toast({ title: 'Copied', description: `${field} copied to clipboard.` })

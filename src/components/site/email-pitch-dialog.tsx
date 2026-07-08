@@ -38,7 +38,8 @@ import {
   Server,
   ShieldCheck,
 } from 'lucide-react'
-import { type Lead, getPitchTemplate, type EmailTemplate } from '@/lib/email-templates'
+import { type Lead } from '@/lib/constants'
+import { getPitchTemplate, type EmailTemplate } from '@/lib/email-templates'
 
 /* ------------------------------------------------------------------ */
 /*  SMTP Settings (persisted in localStorage)                           */

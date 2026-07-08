@@ -160,7 +160,7 @@ export async function tursoFindLeadById(id: string): Promise<LeadRow | null> {
 
 export async function tursoCreateLead(data: Record<string, unknown>): Promise<LeadRow> {
   const db = getClient()
-  const id = data.id || `cl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const id = data.id ? String(data.id) : `cl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const now = new Date().toISOString()
 
   await db.execute({

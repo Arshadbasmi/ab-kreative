@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import {
   Globe, Copy, Check, Terminal, Wifi, ShieldCheck, Zap, MonitorSmartphone,
   ArrowRight, AlertTriangle, CheckCircle2, XCircle, ExternalLink, Github,
@@ -45,11 +45,11 @@ function StepBadge({ n }: { n: number }) {
 
 // ---------- animation ----------
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
     opacity: 1, y: 0,
-    transition: { delay: i * 0.12, duration: 0.45, ease: 'easeOut' },
+    transition: { delay: i * 0.12, duration: 0.45, ease: 'easeOut' as const },
   }),
 }
 
@@ -194,7 +194,7 @@ export function PublicAccessGuide() {
 
             {/* 4c: One-time setup URL */}
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground font-medium text-foreground">4c. Seed the database (one time only)</p>
+              <p className="text-xs text-muted-foreground font-medium text-foreground">4c. Create the database table (one time only)</p>
               <p className="text-foreground/90">After Vercel redeploys, open this URL in your browser:</p>
               <div className="rounded-lg bg-[#1a1a1a] border border-border p-3 flex items-center gap-2">
                 <code className="text-[#D9FA54] font-mono text-xs flex-1 break-all">ab-kreative.vercel.app/api/setup-db</code>
@@ -206,8 +206,8 @@ export function PublicAccessGuide() {
                   <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                 </button>
               </div>
-              <p className="text-foreground/90">You should see: <code className="text-emerald-400 font-mono text-xs">{"{ \"success\": true, \"count\": 37 }"}</code></p>
-              <p>Then refresh your homepage — all <strong className="text-foreground">37 leads</strong> will appear!</p>
+              <p className="text-foreground/90">You should see: <code className="text-emerald-400 font-mono text-xs">{"{ \"success\": true, \"count\": 0 }"}</code></p>
+              <p>Then use <strong className="text-foreground">AI Generate</strong> to save only verified leads with real contact evidence.</p>
             </div>
 
             <div className="rounded-lg border border-border bg-[#1a1a1a] p-3 text-sm">

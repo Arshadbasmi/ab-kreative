@@ -352,13 +352,13 @@ export function HostingGuide() {
               </p>
             </Step>
 
-            <Step step={5} title="Seed sample data">
+            <Step step={5} title="Optional: seed sample data">
               <CodeBlock
                 code={`bun run scripts/seed.ts`}
                 language="bash"
               />
               <p className="mt-2 text-xs text-muted-foreground/60">
-                Inserts 27 sample leads across all 5 categories for testing.
+                Only use this for demos or testing. Skip it when you want the app to show real verified leads only.
               </p>
             </Step>
 
