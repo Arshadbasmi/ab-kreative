@@ -246,17 +246,28 @@ export function BrowseLeadsView() {
               let generatedCount = 0
               let rejectedCount = 0
               const failedCategories: string[] = []
+              let quotaExhausted = false
+              let quotaMessage = ''
 
               for (const item of generationPlan) {
                 setGeneratingLabel(getCategoryMeta(item.category).short)
                 const res = await fetch('/api/generate-leads', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(item),
+                  body: JSON.stringify({
+                    ...item,
+                    maxQueries: category === 'ALL' ? 2 : 4,
+                  }),
                 })
                 const json = await res.json()
 
                 if (!res.ok) {
+                  if (json.code === 'AI_QUOTA_EXHAUSTED') {
+                    quotaExhausted = true
+                    quotaMessage = json.error || 'Gemini quota is exhausted.'
+                    break
+                  }
+
                   failedCategories.push(item.category)
                   continue
                 }
@@ -300,11 +311,14 @@ export function BrowseLeadsView() {
                 })
               } else {
                 toast({
-                  title: 'No verified leads found',
+                  title: quotaExhausted ? 'AI quota exhausted' : 'No verified leads found',
                   description:
-                    failedCategories.length > 0
+                    quotaExhausted
+                      ? quotaMessage
+                      : failedCategories.length > 0
                       ? `Generation failed for ${failedCategories.join(', ')}. Try one category at a time.`
                       : `Rejected ${rejectedCount} result${rejectedCount === 1 ? '' : 's'} without real contact evidence.`,
+                  variant: quotaExhausted ? 'destructive' : undefined,
                 })
               }
             } catch (e) {

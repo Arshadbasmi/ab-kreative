@@ -879,6 +879,10 @@ function getGeminiOutputText(responseJson: Record<string, unknown>): string {
   return ''
 }
 
+function isAiQuotaError(error: unknown): boolean {
+  return /quota|too_many_requests|rate limit|429/i.test(String(error))
+}
+
 async function callGeminiInteraction(input: string): Promise<string> {
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error('GOOGLE_GEMINI_API_KEY is not configured')
@@ -935,13 +939,14 @@ async function generateWithGemini(
   category: string,
   requestedCount: number,
   searchQueries: string[],
+  maxQueries: number,
 ): Promise<GenerationResult> {
   const allLeads: LeadCandidate[] = []
   const queriesTried: string[] = []
   let rejectedCandidates = 0
   let pagesChecked = 0
   const scope = getMarketScope(category)
-  const queryPlan = unique([...getContactDiscoveryQueries(category, scope), ...searchQueries]).slice(0, 8)
+  const queryPlan = unique([...getContactDiscoveryQueries(category, scope), ...searchQueries]).slice(0, maxQueries)
 
   for (const query of queryPlan) {
     if (allLeads.length >= requestedCount) break
@@ -971,6 +976,7 @@ async function generateWithZai(
   category: string,
   requestedCount: number,
   searchQueries: string[],
+  maxQueries: number,
 ): Promise<GenerationResult> {
   const zai = await ZAI.create()
   const allLeads: LeadCandidate[] = []
@@ -979,7 +985,7 @@ async function generateWithZai(
   let pagesChecked = 0
   const scope = getMarketScope(category)
 
-  for (const query of searchQueries) {
+  for (const query of searchQueries.slice(0, maxQueries)) {
     if (allLeads.length >= requestedCount) break
     queriesTried.push(query)
 
@@ -1054,21 +1060,22 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { category, count = 5 } = body
+  const { category, count = 5, maxQueries = 3 } = body
 
   if (!category || typeof category !== 'string') {
     return NextResponse.json({ error: 'Category is required' }, { status: 400 })
   }
 
   const requestedCount = Math.min(Math.max(Number(count) || 5, 1), 10)
+  const requestedMaxQueries = Math.min(Math.max(Number(maxQueries) || 3, 1), 5)
   const searchQueries = getSearchQueries(category)
 
   try {
     let generation: GenerationResult
     if (process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY) {
-      generation = await generateWithGemini(category, requestedCount, searchQueries)
+      generation = await generateWithGemini(category, requestedCount, searchQueries, requestedMaxQueries)
     } else {
-      generation = await generateWithZai(category, requestedCount, searchQueries)
+      generation = await generateWithZai(category, requestedCount, searchQueries, requestedMaxQueries)
     }
 
     const seen = new Set<string>()
@@ -1110,6 +1117,18 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Generate leads error:', error)
+
+    if (isAiQuotaError(error)) {
+      return NextResponse.json(
+        {
+          error: 'Gemini quota is exhausted. Wait for quota reset or add billing/credits/new Gemini API key.',
+          code: 'AI_QUOTA_EXHAUSTED',
+          details: String(error),
+        },
+        { status: 429 },
+      )
+    }
+
     return NextResponse.json(
       { error: 'Failed to generate leads', details: String(error) },
       { status: 500 },
