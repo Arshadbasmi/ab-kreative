@@ -6,10 +6,15 @@ import {
   normalizeEmail,
   normalizePublicUrl,
 } from '@/lib/lead-quality'
+import { proxyToLiveApi, shouldProxyToLiveApi } from '@/lib/live-api-proxy'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  if (shouldProxyToLiveApi()) {
+    return proxyToLiveApi(request, '/api/save-lead')
+  }
+
   const body = await request.json()
 
   // Validate required fields

@@ -10,11 +10,16 @@ import {
   normalizeEmail,
   normalizePublicUrl,
 } from '@/lib/lead-quality'
+import { proxyToLiveApi, shouldProxyToLiveApi } from '@/lib/live-api-proxy'
 
 export const dynamic = 'force-dynamic'
 
 // GET /api/leads - List leads with filters
 export async function GET(request: NextRequest) {
+  if (shouldProxyToLiveApi()) {
+    return proxyToLiveApi(request, '/api/leads')
+  }
+
   try {
     // Try Turso first (direct libsql - more reliable than Prisma adapter)
     if (process.env.TURSO_DATABASE_URL) {
@@ -131,6 +136,10 @@ export async function GET(request: NextRequest) {
 
 // POST /api/leads - Create a new lead
 export async function POST(request: NextRequest) {
+  if (shouldProxyToLiveApi()) {
+    return proxyToLiveApi(request, '/api/leads')
+  }
+
   try {
     const body = await request.json()
     const source = String(body.source || 'direct')

@@ -6,6 +6,7 @@ import {
   normalizeEmail,
   normalizePublicUrl,
 } from '@/lib/lead-quality'
+import { proxyToLiveApi, shouldProxyToLiveApi } from '@/lib/live-api-proxy'
 
 export const dynamic = 'force-dynamic'
 
@@ -973,6 +974,10 @@ async function generateWithZai(
 // POST handler
 // ---------------------------------------------------------------------------
 export async function POST(request: NextRequest) {
+  if (shouldProxyToLiveApi()) {
+    return proxyToLiveApi(request, '/api/generate-leads')
+  }
+
   // Rate limiting
   const ip = request.headers.get('x-forwarded-for') || 'unknown'
   if (isRateLimited(ip)) {

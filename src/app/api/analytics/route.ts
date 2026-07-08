@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db, isDbAvailable, getDbReady } from '@/lib/db'
 import { initTursoClient, tursoGetAnalytics } from '@/lib/turso-client'
+import { proxyToLiveApi, shouldProxyToLiveApi } from '@/lib/live-api-proxy'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,11 @@ const emptyResponse = {
 }
 
 // GET /api/analytics - Aggregate stats for the dashboard
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (shouldProxyToLiveApi()) {
+    return proxyToLiveApi(request, '/api/analytics')
+  }
+
   try {
     // Try Turso first (direct libsql)
     if (process.env.TURSO_DATABASE_URL) {

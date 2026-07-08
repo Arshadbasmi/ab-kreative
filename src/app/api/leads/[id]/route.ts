@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, isDbAvailable, getDbReady } from '@/lib/db'
+import { proxyToLiveApi, shouldProxyToLiveApi } from '@/lib/live-api-proxy'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,13 +9,17 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
+
+  if (shouldProxyToLiveApi()) {
+    return proxyToLiveApi(request, `/api/leads/${id}`)
+  }
+
   try {
     await getDbReady()
     if (!isDbAvailable()) {
       return NextResponse.json({ error: 'Database not available' }, { status: 503 })
     }
-
-    const { id } = await params
 
     const lead = await db.lead.findUnique({ where: { id } })
 
@@ -40,13 +45,18 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
+
+  if (shouldProxyToLiveApi()) {
+    return proxyToLiveApi(request, `/api/leads/${id}`)
+  }
+
   try {
     await getDbReady()
     if (!isDbAvailable()) {
       return NextResponse.json({ error: 'Database not available' }, { status: 503 })
     }
 
-    const { id } = await params
     await db.lead.update({
       where: { id },
       data: { status: 'CLOSED' },
