@@ -22,6 +22,14 @@ type SearchEvidence = {
   phones: string[]
 }
 
+type GenerationResult = {
+  leads: LeadCandidate[]
+  queriesTried: string[]
+  rejectedCandidates: number
+  pagesChecked: number
+  provider: 'gemini' | 'zai'
+}
+
 // ---------------------------------------------------------------------------
 // In-memory rate limiter — max 10 calls per minute per IP
 // ---------------------------------------------------------------------------
@@ -199,6 +207,56 @@ Rules:
 - Return valid JSON only — no backticks, no markdown code fences`
 }
 
+function getLeadResponseSchema() {
+  const leadProperties = {
+    title: { type: 'string' },
+    description: { type: 'string' },
+    category: { type: 'string' },
+    subcategory: { type: 'string' },
+    country: { type: 'string' },
+    city: { type: 'string', nullable: true },
+    region: { type: 'string' },
+    budgetMin: { type: 'integer' },
+    budgetMax: { type: 'integer' },
+    currency: { type: 'string' },
+    timeline: { type: 'string' },
+    skills: { type: 'string' },
+    source: { type: 'string' },
+    sourceUrl: { type: 'string' },
+    clientName: { type: 'string' },
+    clientCompany: { type: 'string', nullable: true },
+    clientEmail: { type: 'string' },
+    clientPhone: { type: 'string', nullable: true },
+  }
+
+  return {
+    type: 'object',
+    properties: {
+      leads: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: leadProperties,
+          required: Object.keys(leadProperties),
+        },
+      },
+    },
+    required: ['leads'],
+  }
+}
+
+function buildGeminiPrompt(category: string, query: string, requestedCount: number): string {
+  return `${buildSystemPrompt(category)}
+
+Use Google Search to find current public business leads for this query:
+"${query}"
+
+Return a JSON object with exactly this shape:
+{"leads":[ ...lead objects... ]}
+
+Find at most ${requestedCount} leads for this query. The sourceUrl must be the public page where the opportunity/contact evidence was found. The clientEmail must be visible on that exact source page. If you cannot find verified contact evidence, return {"leads":[]}.`
+}
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -210,6 +268,34 @@ function asNumber(value: unknown, fallback: number): number {
 
 function unique(items: string[]): string[] {
   return Array.from(new Set(items.filter(Boolean)))
+}
+
+function parseLeadCandidates(content: string): LeadCandidate[] {
+  try {
+    const parsed = JSON.parse(content)
+    if (Array.isArray(parsed)) return parsed as LeadCandidate[]
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.leads)) {
+      return parsed.leads as LeadCandidate[]
+    }
+  } catch {
+    const objectMatch = content.match(/\{[\s\S]*\}/)
+    const arrayMatch = content.match(/\[[\s\S]*\]/)
+    const jsonText = objectMatch?.[0] || arrayMatch?.[0]
+
+    if (jsonText) {
+      try {
+        const parsed = JSON.parse(jsonText)
+        if (Array.isArray(parsed)) return parsed as LeadCandidate[]
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.leads)) {
+          return parsed.leads as LeadCandidate[]
+        }
+      } catch {
+        return []
+      }
+    }
+  }
+
+  return []
 }
 
 function buildSearchEvidence(searchResults: Array<Record<string, unknown>>): Map<string, SearchEvidence> {
@@ -407,6 +493,177 @@ async function verifyLeadCandidates(
   return { leads: verifiedLeads, rejected, pagesChecked }
 }
 
+function getGeminiOutputText(responseJson: Record<string, unknown>): string {
+  if (typeof responseJson.output_text === 'string') {
+    return responseJson.output_text
+  }
+
+  const steps = Array.isArray(responseJson.steps) ? responseJson.steps : []
+  for (const step of steps) {
+    if (!step || typeof step !== 'object') continue
+    const stepRecord = step as Record<string, unknown>
+    if (stepRecord.type !== 'model_output') continue
+
+    const content = Array.isArray(stepRecord.content) ? stepRecord.content : []
+    const textBlocks = content
+      .map((block) => {
+        if (!block || typeof block !== 'object') return ''
+        const blockRecord = block as Record<string, unknown>
+        return blockRecord.type === 'text' && typeof blockRecord.text === 'string'
+          ? blockRecord.text
+          : ''
+      })
+      .filter(Boolean)
+
+    if (textBlocks.length > 0) return textBlocks.join('\n')
+  }
+
+  return ''
+}
+
+async function callGeminiInteraction(input: string): Promise<string> {
+  const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GEMINI_API_KEY is not configured')
+
+  const preferredModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash'
+  const fallbackModels = ['gemini-2.5-flash', 'gemini-2.0-flash']
+  const models = Array.from(new Set([preferredModel, ...fallbackModels]))
+  let lastError = ''
+
+  for (const model of models) {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        model,
+        input,
+        tools: [{ type: 'google_search' }],
+        response_format: {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: getLeadResponseSchema(),
+        },
+      }),
+    })
+
+    const responseText = await response.text()
+    if (!response.ok) {
+      lastError = `Gemini ${model} failed: ${response.status} ${responseText.slice(0, 500)}`
+      continue
+    }
+
+    const responseJson = JSON.parse(responseText) as Record<string, unknown>
+    return getGeminiOutputText(responseJson)
+  }
+
+  throw new Error(lastError || 'Gemini request failed')
+}
+
+async function generateWithGemini(
+  category: string,
+  requestedCount: number,
+  searchQueries: string[],
+): Promise<GenerationResult> {
+  const allLeads: LeadCandidate[] = []
+  const queriesTried: string[] = []
+  let rejectedCandidates = 0
+  let pagesChecked = 0
+
+  for (const query of searchQueries) {
+    if (allLeads.length >= requestedCount) break
+    queriesTried.push(query)
+
+    const outputText = await callGeminiInteraction(
+      buildGeminiPrompt(category, query, requestedCount - allLeads.length),
+    )
+    const parsedLeads = parseLeadCandidates(outputText)
+    const verified = await verifyLeadCandidates(parsedLeads, category, new Map())
+
+    allLeads.push(...verified.leads)
+    rejectedCandidates += verified.rejected
+    pagesChecked += verified.pagesChecked
+  }
+
+  return {
+    leads: allLeads,
+    queriesTried,
+    rejectedCandidates,
+    pagesChecked,
+    provider: 'gemini',
+  }
+}
+
+async function generateWithZai(
+  category: string,
+  requestedCount: number,
+  searchQueries: string[],
+): Promise<GenerationResult> {
+  const zai = await ZAI.create()
+  const allLeads: LeadCandidate[] = []
+  const queriesTried: string[] = []
+  let rejectedCandidates = 0
+  let pagesChecked = 0
+
+  for (const query of searchQueries) {
+    if (allLeads.length >= requestedCount) break
+    queriesTried.push(query)
+
+    // Step 1: Web search for potential leads
+    let searchResults: Array<Record<string, unknown>>
+    try {
+      searchResults = (await zai.functions.invoke('web_search', {
+        query,
+        num: 5,
+      })) as unknown as Array<Record<string, unknown>>
+    } catch {
+      continue
+    }
+
+    if (!Array.isArray(searchResults) || searchResults.length === 0) continue
+
+    // Step 2: Build context from search results
+    const searchContext = searchResults
+      .map((r) => `${r.name || r.title || ''}\n${r.snippet || r.description || ''}\n${r.url || ''}`)
+      .join('\n\n')
+
+    if (!searchContext.trim()) continue
+    const searchEvidenceByUrl = buildSearchEvidence(searchResults)
+
+    // Step 3: Use LLM to extract structured leads from search context
+    const llmResponse = await zai.chat.completions.create({
+      messages: [
+        {
+          role: 'system',
+          content: buildSystemPrompt(category),
+        },
+        {
+          role: 'user',
+          content: `Search query: "${query}"\n\nSearch results:\n${searchContext}\n\nExtract all genuine business leads from these results as a JSON array.`,
+        },
+      ],
+      thinking: { type: 'disabled' },
+    })
+
+    const content = llmResponse.choices?.[0]?.message?.content || '[]'
+    const parsedLeads = parseLeadCandidates(content)
+    const verified = await verifyLeadCandidates(parsedLeads, category, searchEvidenceByUrl)
+    allLeads.push(...verified.leads)
+    rejectedCandidates += verified.rejected
+    pagesChecked += verified.pagesChecked
+  }
+
+  return {
+    leads: allLeads,
+    queriesTried,
+    rejectedCandidates,
+    pagesChecked,
+    provider: 'zai',
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST handler
 // ---------------------------------------------------------------------------
@@ -431,87 +688,15 @@ export async function POST(request: NextRequest) {
   const searchQueries = getSearchQueries(category)
 
   try {
-    const zai = await ZAI.create()
-    const allLeads: LeadCandidate[] = []
-    const queriesTried: string[] = []
-    let rejectedCandidates = 0
-    let pagesChecked = 0
-
-    for (const query of searchQueries) {
-      if (allLeads.length >= requestedCount) break
-      queriesTried.push(query)
-
-      // Step 1: Web search for potential leads
-      let searchResults: Array<Record<string, unknown>>
-      try {
-        searchResults = (await zai.functions.invoke('web_search', {
-          query,
-          num: 5,
-        })) as unknown as Array<Record<string, unknown>>
-      } catch {
-        continue
-      }
-
-      if (!Array.isArray(searchResults) || searchResults.length === 0) continue
-
-      // Step 2: Build context from search results
-      const searchContext = searchResults
-        .map((r) => `${r.name || r.title || ''}\n${r.snippet || r.description || ''}\n${r.url || ''}`)
-        .join('\n\n')
-
-      if (!searchContext.trim()) continue
-      const searchEvidenceByUrl = buildSearchEvidence(searchResults)
-
-      // Step 3: Use LLM to extract structured leads from search context
-      const llmResponse = await zai.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: buildSystemPrompt(category),
-          },
-          {
-            role: 'user',
-            content: `Search query: "${query}"\n\nSearch results:\n${searchContext}\n\nExtract all genuine business leads from these results as a JSON array.`,
-          },
-        ],
-        thinking: { type: 'disabled' },
-      })
-
-      const content = llmResponse.choices?.[0]?.message?.content || '[]'
-      let parsedLeads: LeadCandidate[] = []
-
-      // Step 4: Parse JSON from LLM response
-      try {
-        // Try direct parse first
-        const parsed = JSON.parse(content)
-        if (Array.isArray(parsed)) {
-          parsedLeads = parsed as LeadCandidate[]
-        }
-      } catch {
-        // Fallback: extract JSON array from markdown code fences or mixed content
-        const jsonMatch = content.match(/\[[\s\S]*\]/)
-        if (jsonMatch) {
-          try {
-            const parsed = JSON.parse(jsonMatch[0])
-            if (Array.isArray(parsed)) {
-              parsedLeads = parsed as LeadCandidate[]
-            }
-          } catch {
-            // Unparseable — skip this batch
-          }
-        }
-      }
-
-      const verified = await verifyLeadCandidates(parsedLeads, category, searchEvidenceByUrl)
-      allLeads.push(...verified.leads)
-      rejectedCandidates += verified.rejected
-      pagesChecked += verified.pagesChecked
-
-      if (allLeads.length >= requestedCount) break
+    let generation: GenerationResult
+    if (process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY) {
+      generation = await generateWithGemini(category, requestedCount, searchQueries)
+    } else {
+      generation = await generateWithZai(category, requestedCount, searchQueries)
     }
 
     const seen = new Set<string>()
-    const dedupedLeads = allLeads.filter((lead) => {
+    const dedupedLeads = generation.leads.filter((lead) => {
       const key = [
         asString(lead.clientEmail).toLowerCase(),
         asString(lead.sourceUrl).toLowerCase(),
@@ -534,11 +719,12 @@ export async function POST(request: NextRequest) {
       leads,
       count: leads.length,
       category,
-      queriesUsed: queriesTried,
+      provider: generation.provider,
+      queriesUsed: generation.queriesTried,
       quality: {
         accepted: leads.length,
-        rejected: rejectedCandidates,
-        pagesChecked,
+        rejected: generation.rejectedCandidates,
+        pagesChecked: generation.pagesChecked,
         requirement: 'Verified public source URL and non-placeholder contact email found in search/page evidence.',
       },
       message:
