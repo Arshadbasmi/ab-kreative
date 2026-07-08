@@ -66,10 +66,9 @@ function saveConfigs(configs: EmailRouteConfig[]) {
 
 export function EmailManagementDashboard() {
   const { toast } = useToast()
-  const [configs, setConfigs] = useState<EmailRouteConfig[]>(() => {
-    const routes = loadRoutes()
-    return loadRouteSettings(routes)
-  })
+  const [configs, setConfigs] = useState<EmailRouteConfig[]>(() =>
+    mergeRouteSettings(DEFAULT_EMAIL_ROUTES, {}),
+  )
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

@@ -71,6 +71,12 @@ const CATEGORY_ICONS: Record<string, typeof LayoutGrid> = {
   DUBAI_BUSINESS_SETUP: Building2,
 }
 
+const CASH_FLOW_GENERATION_PLAN = [
+  { category: 'INTERIOR_DESIGN', count: 3 },
+  { category: 'DESIGN_SERVICES', count: 3 },
+  { category: 'FITOUT', count: 4 },
+]
+
 export function BrowseLeadsView() {
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('ALL')
@@ -108,7 +114,7 @@ export function BrowseLeadsView() {
   })
 
   // Category counts from data or API
-  const { data: analytics } = useSWR<{
+  const { data: analytics, mutate: mutateAnalytics } = useSWR<{
     leadsByCategory: Array<{ category: string; count: number }>
   }>('/api/analytics', fetcher, {
     revalidateOnFocus: false,
@@ -216,24 +222,34 @@ export function BrowseLeadsView() {
           onClick={async () => {
             setGenerating(true)
             try {
-              const activeCat = category !== 'ALL' ? category : 'FITOUT'
-              const res = await fetch('/api/generate-leads', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ category: activeCat, count: 5 }),
-              })
-              const json = await res.json()
+              const generationPlan =
+                category === 'ALL'
+                  ? CASH_FLOW_GENERATION_PLAN
+                  : [{ category, count: 5 }]
 
-              if (!res.ok) {
-                throw new Error(json.error || 'Failed to generate leads')
-              }
+              let savedCount = 0
+              let failedCount = 0
+              let generatedCount = 0
+              let rejectedCount = 0
+              const failedCategories: string[] = []
 
-              if (json.leads?.length > 0) {
-                let savedCount = 0
-                let failedCount = 0
+              for (const item of generationPlan) {
+                const res = await fetch('/api/generate-leads', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(item),
+                })
+                const json = await res.json()
 
-                // Save each generated lead to the database
-                for (const lead of json.leads) {
+                if (!res.ok) {
+                  failedCategories.push(item.category)
+                  continue
+                }
+
+                generatedCount += json.leads?.length || 0
+                rejectedCount += json.quality?.rejected || 0
+
+                for (const lead of json.leads || []) {
                   const saveRes = await fetch('/api/save-lead', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -246,30 +262,34 @@ export function BrowseLeadsView() {
                     failedCount++
                   }
                 }
+              }
 
-                if (savedCount > 0) {
-                  mutate() // Refresh leads list
-                  toast({
-                    title: `${savedCount} verified lead${savedCount === 1 ? '' : 's'} saved`,
-                    description:
-                      failedCount > 0
+              if (savedCount > 0) {
+                mutate()
+                mutateAnalytics()
+                toast({
+                  title: `${savedCount} verified lead${savedCount === 1 ? '' : 's'} saved`,
+                  description:
+                    category === 'ALL'
+                      ? `Cash-flow batch ran design + fitout. Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`
+                      : failedCount > 0
                         ? `${failedCount} generated lead${failedCount === 1 ? '' : 's'} could not be saved.`
-                        : `Rejected ${json.quality?.rejected || 0} unverified result${json.quality?.rejected === 1 ? '' : 's'}.`,
-                  })
-                } else {
-                  toast({
-                    title: 'Leads were found but not saved',
-                    description:
-                      'Check your database settings and run the database setup before generating again.',
-                    variant: 'destructive',
-                  })
-                }
+                        : `Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`,
+                })
+              } else if (generatedCount > 0) {
+                toast({
+                  title: 'Leads were found but not saved',
+                  description:
+                    'Check your database settings and run the database setup before generating again.',
+                  variant: 'destructive',
+                })
               } else {
                 toast({
                   title: 'No verified leads found',
                   description:
-                    json.message ||
-                    `Rejected ${json.quality?.rejected || 0} result${json.quality?.rejected === 1 ? '' : 's'} without real contact evidence.`,
+                    failedCategories.length > 0
+                      ? `Generation failed for ${failedCategories.join(', ')}. Try one category at a time.`
+                      : `Rejected ${rejectedCount} result${rejectedCount === 1 ? '' : 's'} without real contact evidence.`,
                 })
               }
             } catch (e) {
