@@ -526,18 +526,13 @@ async function callGeminiInteraction(input: string): Promise<string> {
   if (!apiKey) throw new Error('GOOGLE_GEMINI_API_KEY is not configured')
 
   const preferredModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash'
-  const fallbackModels = ['gemini-2.5-flash', 'gemini-2.0-flash']
+  const fallbackModels = ['gemini-2.5-flash']
   const models = Array.from(new Set([preferredModel, ...fallbackModels]))
-  let lastError = ''
+  const errors: string[] = []
 
   for (const model of models) {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
+    const payloads = [
+      {
         model,
         input,
         tools: [{ type: 'google_search' }],
@@ -546,20 +541,36 @@ async function callGeminiInteraction(input: string): Promise<string> {
           mime_type: 'application/json',
           schema: getLeadResponseSchema(),
         },
-      }),
-    })
+      },
+      {
+        model,
+        input: `${input}\n\nReturn only valid JSON. Do not wrap it in markdown.`,
+        tools: [{ type: 'google_search' }],
+      },
+    ]
 
-    const responseText = await response.text()
-    if (!response.ok) {
-      lastError = `Gemini ${model} failed: ${response.status} ${responseText.slice(0, 500)}`
-      continue
+    for (const payload of payloads) {
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const responseText = await response.text()
+      if (!response.ok) {
+        errors.push(`Gemini ${model} failed: ${response.status} ${responseText.slice(0, 500)}`)
+        continue
+      }
+
+      const responseJson = JSON.parse(responseText) as Record<string, unknown>
+      return getGeminiOutputText(responseJson)
     }
-
-    const responseJson = JSON.parse(responseText) as Record<string, unknown>
-    return getGeminiOutputText(responseJson)
   }
 
-  throw new Error(lastError || 'Gemini request failed')
+  throw new Error(errors.join(' | ') || 'Gemini request failed')
 }
 
 async function generateWithGemini(
