@@ -18,6 +18,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import {
   Send,
@@ -35,14 +42,17 @@ import { type Lead } from '@/lib/constants'
 import { getPitchTemplate, type EmailTemplate } from '@/lib/email-templates'
 import {
   DEFAULT_EMAIL_ROUTES,
+  EMAIL_PROVIDER_PRESETS,
   EMAIL_ROUTES_STORAGE_KEY,
   EMAIL_ROUTE_SETTINGS_STORAGE_KEY,
   getEmailRouteForCategory,
+  getEmailProviderPreset,
   mergeEmailRoutes,
   mergeRouteSettings,
   type EmailRoute,
   type EmailRouteConfig,
   type EmailRouteId,
+  type EmailProviderId,
   type EmailRouteSettings,
 } from '@/lib/email-routing'
 
@@ -86,6 +96,7 @@ function saveEmailConfig(config: EmailRouteConfig) {
     (acc, item) => {
       acc[item.id] = {
         enabled: item.enabled,
+        smtpProvider: item.smtpProvider,
         smtpHost: item.smtpHost,
         smtpPort: item.smtpPort,
         smtpUser: item.smtpUser,
@@ -157,6 +168,21 @@ export function EmailPitchDialog({
     toast({ title: 'Sender saved', description: `${emailConfig.email} is ready for ${emailConfig.label}.` })
   }, [emailConfig, toast])
 
+  const handleProviderChange = useCallback((providerId: EmailProviderId) => {
+    const provider = getEmailProviderPreset(providerId)
+
+    setEmailConfig((config) => ({
+      ...config,
+      smtpProvider: provider.id,
+      ...(provider.id === 'custom'
+        ? {}
+        : {
+            smtpHost: provider.host,
+            smtpPort: provider.port,
+          }),
+    }))
+  }, [])
+
   const handleSend = async () => {
     if (!emailConfig.enabled || !emailConfig.smtpUser || !emailConfig.smtpPass) {
       setSettingsOpen(true)
@@ -196,9 +222,10 @@ export function EmailPitchDialog({
           description: `Sent from ${result.from || emailConfig.email} to ${lead.clientEmail}`,
         })
       } else {
+        setSettingsOpen(true)
         toast({
           title: 'Failed to send',
-          description: result.error || 'Unknown error. Check your SMTP settings.',
+          description: result.error || 'Unknown error. Check SMTP settings, or use Open in email app.',
           variant: 'destructive',
         })
       }
@@ -271,6 +298,24 @@ export function EmailPitchDialog({
                 <AccordionContent>
                   <div className="mt-3 space-y-3 rounded-lg border border-border bg-[#111111] p-4">
                     <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label className="text-xs text-muted-foreground">Email Provider</Label>
+                        <Select
+                          value={emailConfig.smtpProvider}
+                          onValueChange={(value) => handleProviderChange(value as EmailProviderId)}
+                        >
+                          <SelectTrigger className="border-border bg-[#0A0A0A] text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="border-border bg-[#111111]">
+                            {EMAIL_PROVIDER_PRESETS.map((provider) => (
+                              <SelectItem key={provider.id} value={provider.id}>
+                                {provider.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Sender Email</Label>
                         <Input
@@ -329,7 +374,7 @@ export function EmailPitchDialog({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">App Password</Label>
+                        <Label className="text-xs text-muted-foreground">Mailbox / App Password</Label>
                         <Input
                           type="password"
                           value={emailConfig.smtpPass}

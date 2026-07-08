@@ -1,4 +1,12 @@
 export type EmailRouteId = 'design' | 'fitout' | 'approvals' | 'finance' | 'logistics'
+export type EmailProviderId =
+  | 'domain'
+  | 'google'
+  | 'hostinger'
+  | 'zoho'
+  | 'outlook'
+  | 'godaddy'
+  | 'custom'
 
 export type EmailRoute = {
   id: EmailRouteId
@@ -10,6 +18,7 @@ export type EmailRoute = {
 
 export type EmailRouteSettings = {
   enabled: boolean
+  smtpProvider: EmailProviderId
   smtpHost: string
   smtpPort: string
   smtpUser: string
@@ -21,6 +30,21 @@ export type EmailRouteConfig = EmailRoute & EmailRouteSettings
 
 export const EMAIL_ROUTES_STORAGE_KEY = 'abkreative_email_routes_v1'
 export const EMAIL_ROUTE_SETTINGS_STORAGE_KEY = 'abkreative_email_route_settings_v1'
+
+export const EMAIL_PROVIDER_PRESETS: Array<{
+  id: EmailProviderId
+  label: string
+  host: string
+  port: string
+}> = [
+  { id: 'domain', label: 'Domain Mail', host: 'mail.abkreative.com', port: '465' },
+  { id: 'google', label: 'Google Workspace', host: 'smtp.gmail.com', port: '587' },
+  { id: 'hostinger', label: 'Hostinger', host: 'smtp.hostinger.com', port: '465' },
+  { id: 'zoho', label: 'Zoho Mail', host: 'smtp.zoho.com', port: '465' },
+  { id: 'outlook', label: 'Outlook / Microsoft 365', host: 'smtp.office365.com', port: '587' },
+  { id: 'godaddy', label: 'GoDaddy', host: 'smtpout.secureserver.net', port: '465' },
+  { id: 'custom', label: 'Custom SMTP', host: '', port: '587' },
+]
 
 export const DEFAULT_EMAIL_ROUTES: EmailRoute[] = [
   {
@@ -82,14 +106,21 @@ export const CATEGORY_EMAIL_ROUTE: Record<string, EmailRouteId> = DEFAULT_EMAIL_
 )
 
 export function getDefaultRouteSettings(route: EmailRoute): EmailRouteSettings {
+  const domainPreset = getEmailProviderPreset('domain')
+
   return {
     enabled: true,
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: '587',
+    smtpProvider: domainPreset.id,
+    smtpHost: domainPreset.host,
+    smtpPort: domainPreset.port,
     smtpUser: route.email,
     smtpPass: '',
     fromName: 'AB Kreative',
   }
+}
+
+export function getEmailProviderPreset(providerId: EmailProviderId) {
+  return EMAIL_PROVIDER_PRESETS.find((provider) => provider.id === providerId) || EMAIL_PROVIDER_PRESETS[0]
 }
 
 export function mergeEmailRoutes(overrides: Partial<EmailRoute>[]): EmailRoute[] {
@@ -108,11 +139,27 @@ export function mergeRouteSettings(
   routes: EmailRoute[],
   settings: Partial<Record<EmailRouteId, Partial<EmailRouteSettings>>>,
 ): EmailRouteConfig[] {
-  return routes.map((route) => ({
-    ...route,
-    ...getDefaultRouteSettings(route),
-    ...(settings[route.id] || {}),
-  }))
+  return routes.map((route) => {
+    const savedSettings = settings[route.id] || {}
+    const config = {
+      ...route,
+      ...getDefaultRouteSettings(route),
+      ...savedSettings,
+    }
+
+    if (!savedSettings.smtpProvider && config.smtpHost === 'smtp.gmail.com') {
+      const domainPreset = getEmailProviderPreset('domain')
+      return {
+        ...config,
+        smtpProvider: domainPreset.id,
+        smtpHost: domainPreset.host,
+        smtpPort: domainPreset.port,
+        smtpUser: route.email,
+      }
+    }
+
+    return config
+  })
 }
 
 export function getEmailRouteForCategory(

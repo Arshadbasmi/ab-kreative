@@ -75,9 +75,19 @@ export async function POST(request: NextRequest) {
         { status: 502 }
       )
     }
-    if (msg.includes('Invalid login') || msg.includes('Authentication failed')) {
+    if (
+      msg.includes('Invalid login') ||
+      msg.includes('Authentication failed') ||
+      msg.includes('EAUTH') ||
+      msg.includes('535') ||
+      msg.includes('534') ||
+      msg.includes('Username and Password not accepted')
+    ) {
       return NextResponse.json(
-        { error: 'SMTP authentication failed. Check your email and app password.' },
+        {
+          error:
+            'SMTP authentication failed. Choose the correct email provider, use the full mailbox as username, and enter the mailbox/app password.',
+        },
         { status: 401 }
       )
     }

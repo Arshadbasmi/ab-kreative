@@ -7,15 +7,25 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { getCategoryMeta } from '@/lib/constants'
 import {
   DEFAULT_EMAIL_ROUTES,
+  EMAIL_PROVIDER_PRESETS,
   EMAIL_ROUTES_STORAGE_KEY,
   EMAIL_ROUTE_SETTINGS_STORAGE_KEY,
+  getEmailProviderPreset,
   type EmailRoute,
   type EmailRouteConfig,
   type EmailRouteId,
+  type EmailProviderId,
   type EmailRouteSettings,
   mergeEmailRoutes,
   mergeRouteSettings,
@@ -49,6 +59,7 @@ function saveConfigs(configs: EmailRouteConfig[]) {
     (acc, config) => {
       acc[config.id] = {
         enabled: config.enabled,
+        smtpProvider: config.smtpProvider,
         smtpHost: config.smtpHost,
         smtpPort: config.smtpPort,
         smtpUser: config.smtpUser,
@@ -93,6 +104,20 @@ export function EmailManagementDashboard() {
     setConfigs((current) =>
       current.map((config) => (config.id === id ? { ...config, ...patch } : config)),
     )
+  }
+
+  function updateProvider(id: EmailRouteId, providerId: EmailProviderId) {
+    const provider = getEmailProviderPreset(providerId)
+
+    updateConfig(id, {
+      smtpProvider: provider.id,
+      ...(provider.id === 'custom'
+        ? {}
+        : {
+            smtpHost: provider.host,
+            smtpPort: provider.port,
+          }),
+    })
   }
 
   function handleSave() {
@@ -204,6 +229,24 @@ export function EmailManagementDashboard() {
                 </div>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs text-muted-foreground">Email Provider</Label>
+                    <Select
+                      value={config.smtpProvider}
+                      onValueChange={(value) => updateProvider(config.id, value as EmailProviderId)}
+                    >
+                      <SelectTrigger className="border-border bg-[#0A0A0A] text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="border-border bg-[#111111]">
+                        {EMAIL_PROVIDER_PRESETS.map((provider) => (
+                          <SelectItem key={provider.id} value={provider.id}>
+                            {provider.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Sender Email</Label>
                     <div className="flex gap-2">
@@ -265,7 +308,7 @@ export function EmailManagementDashboard() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">App Password</Label>
+                    <Label className="text-xs text-muted-foreground">Mailbox / App Password</Label>
                     <Input
                       type="password"
                       value={config.smtpPass}
