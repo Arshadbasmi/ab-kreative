@@ -5,9 +5,9 @@ let dbMode = 'local';
 let isReady = false;
 
 const prismaClientSingleton = () => {
-  const databaseUrl = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+  const databaseUrl = process.env.TURSO_DATABASE_URL ?? process.env.DATABASE_URL;
 
-  // Dynamic fallback check
+  // Prefer Turso when cloud credentials are present, then fall back to local SQLite.
   if (databaseUrl && databaseUrl.startsWith('libsql:') && process.env.TURSO_AUTH_TOKEN) {
     dbMode = 'turso';
 
