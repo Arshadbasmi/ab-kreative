@@ -43,6 +43,7 @@ import {
   CATEGORIES,
   REGIONS,
   SUBCATEGORIES,
+  getCategoryMeta,
   type Lead,
 } from '@/lib/constants'
 import { motion } from 'framer-motion'
@@ -71,10 +72,22 @@ const CATEGORY_ICONS: Record<string, typeof LayoutGrid> = {
   DUBAI_BUSINESS_SETUP: Building2,
 }
 
-const CASH_FLOW_GENERATION_PLAN = [
-  { category: 'INTERIOR_DESIGN', count: 3 },
-  { category: 'DESIGN_SERVICES', count: 3 },
-  { category: 'FITOUT', count: 4 },
+const DAILY_MAX_GENERATION_PLAN = [
+  { category: 'DESIGN_SERVICES', count: 10 },
+  { category: 'TECHNICAL_DESIGN', count: 10 },
+  { category: 'VISUALIZATION_3D', count: 10 },
+  { category: 'SOFTWARE_DEV', count: 8 },
+  { category: 'INTERIOR_DESIGN', count: 8 },
+  { category: 'FITOUT', count: 7 },
+  { category: 'ADVERTISING', count: 5 },
+  { category: 'BUSINESS_SETUP', count: 4 },
+  { category: 'UAE_APPROVALS', count: 4 },
+  { category: 'LOGISTICS', count: 4 },
+  { category: 'FINANCE', count: 4 },
+  { category: 'VIRAL_PRODUCTS', count: 4 },
+  { category: 'INVESTMENT', count: 3 },
+  { category: 'REAL_ESTATE', count: 3 },
+  { category: 'INVESTORS', count: 3 },
 ]
 
 export function BrowseLeadsView() {
@@ -90,6 +103,7 @@ export function BrowseLeadsView() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [todayOnly, setTodayOnly] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [generatingLabel, setGeneratingLabel] = useState('')
 
   const qs = useMemo(() => {
     const params = new URLSearchParams()
@@ -224,8 +238,8 @@ export function BrowseLeadsView() {
             try {
               const generationPlan =
                 category === 'ALL'
-                  ? CASH_FLOW_GENERATION_PLAN
-                  : [{ category, count: 5 }]
+                  ? DAILY_MAX_GENERATION_PLAN
+                  : [{ category, count: 10 }]
 
               let savedCount = 0
               let failedCount = 0
@@ -234,6 +248,7 @@ export function BrowseLeadsView() {
               const failedCategories: string[] = []
 
               for (const item of generationPlan) {
+                setGeneratingLabel(getCategoryMeta(item.category).short)
                 const res = await fetch('/api/generate-leads', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -271,7 +286,7 @@ export function BrowseLeadsView() {
                   title: `${savedCount} verified lead${savedCount === 1 ? '' : 's'} saved`,
                   description:
                     category === 'ALL'
-                      ? `Cash-flow batch ran design + fitout. Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`
+                      ? `Daily max ran all categories, design first. Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`
                       : failedCount > 0
                         ? `${failedCount} generated lead${failedCount === 1 ? '' : 's'} could not be saved.`
                         : `Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`,
@@ -301,12 +316,19 @@ export function BrowseLeadsView() {
               })
             } finally {
               setGenerating(false)
+              setGeneratingLabel('')
             }
           }}
           className="h-11 gap-2 border-border bg-[#111111] text-[#D9FA54] hover:bg-[#D9FA54]/10 hover:text-[#D9FA54] disabled:opacity-50"
         >
           {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="text-base">⚡</span>}
-          {generating ? 'Generating...' : 'AI Generate'}
+          {generating
+            ? generatingLabel
+              ? `Generating ${generatingLabel}...`
+              : 'Generating...'
+            : category === 'ALL'
+              ? 'Daily Max Verified'
+              : 'Generate 10 Verified'}
         </Button>
       </div>
 

@@ -50,10 +50,10 @@ function getMarketScope(category: string): MarketScope {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory rate limiter — max 10 calls per minute per IP
+// In-memory rate limiter — allows one full daily max run from the UI.
 // ---------------------------------------------------------------------------
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT_MAX = 10
+const RATE_LIMIT_MAX = 30
 const RATE_LIMIT_WINDOW_MS = 60_000
 
 function isRateLimited(ip: string): boolean {
@@ -76,39 +76,42 @@ function getSearchQueries(category: string): string[] {
   const year = new Date().getFullYear()
   const queries: Record<string, string[]> = {
     INTERIOR_DESIGN: [
-      'interior design project hiring 2025',
-      'Dubai villa interior design company looking',
-      'Saudi Arabia residential interior design required',
-      'Qatar hotel interior design contractor needed',
-      'Abu Dhabi luxury apartment interior design tender',
+      `interior design RFP contact email ${year}`,
+      `restaurant interior design needed contact email ${year}`,
+      'villa interior design project request email',
+      'office interior design redesign brief contact email',
+      'retail showroom interior design quotation request email',
     ],
     VISUALIZATION_3D: [
-      'UAE 3D visualization project hiring',
-      'Dubai 3D rendering company looking',
-      'Saudi Arabia architectural visualization required',
-      'UAE 3D walkthrough animation project needed',
-      'Middle East real estate 3D visualization tender',
+      `3D rendering project needed contact email ${year}`,
+      `architectural visualization RFP email ${year}`,
+      'real estate 3D renders required contact email',
+      'product rendering project brief email',
+      'walkthrough animation quotation request email',
     ],
     DESIGN_SERVICES: [
-      'graphic design project hiring 2025',
-      'Dubai brand identity design company required',
-      'Saudi Arabia logo design agency looking',
-      'UAE packaging design project needed',
-      'Middle East marketing material design tender',
+      `graphic design RFP contact email ${year}`,
+      `website redesign project request proposal email ${year}`,
+      'logo branding design needed contact email',
+      'pitch deck presentation design required email',
+      'social media design retainer needed contact email',
+      'packaging design quotation request email',
     ],
     TECHNICAL_DESIGN: [
-      'CAD drafting project hiring',
-      'Dubai MEP design consultant required',
-      'Saudi Arabia structural design engineer needed',
-      'UAE shop drawing preparation company looking',
-      'Middle East architecture technical drawing tender',
+      `shop drawings needed contact email ${year}`,
+      `CAD drafting project RFP email ${year}`,
+      'technical drawings required contact email',
+      'joinery shop drawings outsourcing email',
+      'as built drawings CAD drafting request email',
+      'MEP coordination drawings quotation request email',
     ],
     SOFTWARE_DEV: [
-      'software development project hiring 2025',
-      'Dubai web development company looking',
-      'Saudi Arabia mobile app development required',
-      'UAE custom software development tender',
-      'Middle East ERP system implementation project needed',
+      `website design RFP contact email ${year}`,
+      `web design project needed email ${year}`,
+      'landing page design project contact email',
+      'ecommerce website redesign request proposal email',
+      'UI UX design project brief email',
+      'business website development quotation request email',
     ],
     FITOUT: [
       `UAE fit-out project tender ${year}`,
@@ -203,11 +206,11 @@ function getSearchQueries(category: string): string[] {
 
 function getContactDiscoveryQueries(category: string, scope: MarketScope): string[] {
   const terms: Record<string, string[]> = {
-    INTERIOR_DESIGN: ['interior design studio', 'villa interior designer'],
-    VISUALIZATION_3D: ['3D rendering studio', 'architectural visualization company'],
-    DESIGN_SERVICES: ['branding agency', 'graphic design studio'],
-    TECHNICAL_DESIGN: ['CAD drafting company', 'MEP design consultant'],
-    SOFTWARE_DEV: ['software development company', 'web development agency'],
+    INTERIOR_DESIGN: ['interior design RFP', 'restaurant interior design needed'],
+    VISUALIZATION_3D: ['3D rendering project', 'architectural visualization RFP'],
+    DESIGN_SERVICES: ['graphic design RFP', 'website redesign project'],
+    TECHNICAL_DESIGN: ['shop drawings needed', 'CAD drafting project'],
+    SOFTWARE_DEV: ['web design project', 'website redesign RFP'],
     FITOUT: ['fit out contractor', 'interior fit out company'],
     FINANCE: ['credit card UAE applicant enquiry', 'personal loan UAE enquiry'],
     LOGISTICS: ['freight forwarding company', 'logistics company'],
@@ -250,6 +253,27 @@ function getContactDiscoveryQueries(category: string, scope: MarketScope): strin
 
 function getCategoryLeadIntent(category: string): string {
   const intents: Record<string, string> = {
+    INTERIOR_DESIGN: `Category-specific intent for INTERIOR_DESIGN:
+- Prioritize active buyers who need interior concepts, space planning, mood boards, restaurant/cafe interiors, office interiors, retail showroom design, villa/apartment design, or design documentation.
+- AB Kreative has 15+ years of design experience, so prioritize serious project owners with budgets, timelines, and a public contact email.
+- Do not return interior design studios or competitors as leads unless the source clearly says they are outsourcing overflow design work.`,
+    VISUALIZATION_3D: `Category-specific intent for VISUALIZATION_3D:
+- Prioritize active buyers who need 3D renders, architectural visualization, product renders, CGI, walkthrough animations, real estate marketing renders, or urgent presentation visuals.
+- Strong online-work signals include "3D rendering needed", "architectural visualization RFP", "product rendering project", "walkthrough animation", "renderings required", and "quotation request".
+- Do not return render studios or visualization companies as leads unless they are clearly hiring or outsourcing.`,
+    DESIGN_SERVICES: `Category-specific intent for DESIGN_SERVICES:
+- This is the highest-priority online income category for AB Kreative.
+- Prioritize active buyers who need graphic design, web design, branding, logo design, pitch decks, company profiles, brochures, packaging, landing pages, UI/UX, social media creatives, or monthly design retainers.
+- Strong signals include "RFP", "request for proposal", "designer needed", "website redesign", "brand identity needed", "presentation design", "quotation request", "urgent", "retainer", and "contact email".
+- Do not return design agencies, freelancers, or competitors as leads unless the source clearly says they are outsourcing work.`,
+    TECHNICAL_DESIGN: `Category-specific intent for TECHNICAL_DESIGN:
+- Prioritize active buyers who need shop drawings, CAD drafting, technical drawings, joinery drawings, authority drawings, as-built drawings, MEP coordination drawings, Revit/BIM support, or drafting outsourcing.
+- This is a strong 15+ years experience category, so prefer urgent, production-ready technical work with clear scope and contact email.
+- Do not return drafting companies or consultants as leads unless they are clearly outsourcing overflow drawing work.`,
+    SOFTWARE_DEV: `Category-specific intent for SOFTWARE_DEV:
+- Prioritize online work that AB Kreative can convert quickly: web design, landing pages, business websites, ecommerce sites, UI/UX, dashboards, and simple app/software projects.
+- Strong signals include "website design needed", "redesign RFP", "landing page", "ecommerce website", "UI UX project", "quotation request", and "contact email".
+- Do not return web agencies or software companies as leads unless they are clearly outsourcing work.`,
     FINANCE: `Category-specific intent for FINANCE:
 - Find UAE people or UAE SMEs showing active buyer intent for credit cards, personal loans, auto loans, home loans, business loans, loan buyout, debt consolidation, balance transfer, or salary-transfer banking.
 - Strong signals include wording like "need", "looking for", "apply", "wanted", "recommend", "minimum salary", "loan buyout", "personal finance", "credit card approval", or "business loan required".
@@ -412,6 +436,23 @@ function hasUaeSignal(text: string): boolean {
 
 function hasNonUaeSignal(text: string): boolean {
   return NON_UAE_LOCATION_RE.test(text)
+}
+
+const PRIORITY_DESIGN_CATEGORIES = new Set([
+  'DESIGN_SERVICES',
+  'TECHNICAL_DESIGN',
+  'VISUALIZATION_3D',
+  'SOFTWARE_DEV',
+  'INTERIOR_DESIGN',
+])
+
+function isUrgentLead(category: string, title: string, description: string, timeline: string): boolean {
+  const text = `${title}\n${description}\n${timeline}`
+  if (/\b(urgent|asap|immediate|quick|needed|required|deadline|rush|this week|1-2 weeks|2-4 weeks)\b/i.test(text)) {
+    return true
+  }
+
+  return PRIORITY_DESIGN_CATEGORIES.has(category) && /^(1-2 weeks|2-4 weeks)$/i.test(timeline)
 }
 
 function normalizeCountry(value: unknown, context = ''): string {
@@ -729,6 +770,7 @@ function buildVerifiedLead(
   const budgetMin = Math.max(0, Math.round(asNumber(rawLead.budgetMin, 0)))
   const budgetMax = Math.max(budgetMin, Math.round(asNumber(rawLead.budgetMax, budgetMin)))
   const country = scope === 'uae' ? 'AE' : normalizeCountry(rawLead.country, locationContext)
+  const timeline = asString(rawLead.timeline) || '2-4 weeks'
 
   return {
     ...rawLead,
@@ -742,7 +784,7 @@ function buildVerifiedLead(
     budgetMin,
     budgetMax,
     currency: 'USD',
-    timeline: asString(rawLead.timeline) || '2-4 weeks',
+    timeline,
     skills,
     source: 'website_scraped',
     sourceUrl,
@@ -750,6 +792,7 @@ function buildVerifiedLead(
     clientCompany: asString(rawLead.clientCompany) || null,
     clientEmail,
     clientPhone,
+    urgent: isUrgentLead(category, title, description, timeline),
   }
 }
 
@@ -1005,7 +1048,7 @@ export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || 'unknown'
   if (isRateLimited(ip)) {
     return NextResponse.json(
-      { error: 'Rate limit exceeded. Max 10 requests per minute.' },
+      { error: `Rate limit exceeded. Max ${RATE_LIMIT_MAX} requests per minute.` },
       { status: 429 },
     )
   }
