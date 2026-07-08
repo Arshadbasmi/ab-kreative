@@ -7,7 +7,19 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { to, subject, body: emailBody, from, smtpHost, smtpPort, smtpUser, smtpPass } = body
+    const {
+      to,
+      subject,
+      body: emailBody,
+      from,
+      fromName = 'AB Kreative',
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      smtpPass,
+      routeId,
+      category,
+    } = body
 
     // Validate required fields
     if (!to || !subject || !emailBody) {
@@ -38,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     // Send email
     const info = await transporter.sendMail({
-      from: `"AB Kreative" <${senderEmail}>`,
+      from: `"${fromName}" <${senderEmail}>`,
       to,
       subject,
       text: emailBody,
@@ -47,6 +59,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       messageId: info.messageId,
+      from: senderEmail,
+      routeId,
+      category,
       message: `Email sent successfully to ${to}`,
     })
   } catch (error: unknown) {

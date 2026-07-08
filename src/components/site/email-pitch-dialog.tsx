@@ -13,13 +13,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -40,34 +33,72 @@ import {
 } from 'lucide-react'
 import { type Lead } from '@/lib/constants'
 import { getPitchTemplate, type EmailTemplate } from '@/lib/email-templates'
+import {
+  DEFAULT_EMAIL_ROUTES,
+  EMAIL_ROUTES_STORAGE_KEY,
+  EMAIL_ROUTE_SETTINGS_STORAGE_KEY,
+  getEmailRouteForCategory,
+  mergeEmailRoutes,
+  mergeRouteSettings,
+  type EmailRoute,
+  type EmailRouteConfig,
+  type EmailRouteId,
+  type EmailRouteSettings,
+} from '@/lib/email-routing'
 
 /* ------------------------------------------------------------------ */
-/*  SMTP Settings (persisted in localStorage)                           */
+/*  Email route settings (persisted in localStorage)                    */
 /* ------------------------------------------------------------------ */
 
-interface SmtpSettings {
-  fromEmail: string
-  smtpHost: string
-  smtpPort: string
-  smtpUser: string
-  smtpPass: string
-}
+function loadEmailRoutes(): EmailRoute[] {
+  if (typeof window === 'undefined') return DEFAULT_EMAIL_ROUTES
 
-const SMTP_STORAGE_KEY = 'abkreative_smtp_settings'
-
-function loadSmtpSettings(): SmtpSettings {
-  if (typeof window === 'undefined') {
-    return { fromEmail: '', smtpHost: 'smtp.gmail.com', smtpPort: '587', smtpUser: '', smtpPass: '' }
-  }
   try {
-    const raw = localStorage.getItem(SMTP_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    const raw = localStorage.getItem(EMAIL_ROUTES_STORAGE_KEY)
+    return mergeEmailRoutes(raw ? JSON.parse(raw) : [])
   } catch {}
-  return { fromEmail: '', smtpHost: 'smtp.gmail.com', smtpPort: '587', smtpUser: '', smtpPass: '' }
+
+  return DEFAULT_EMAIL_ROUTES
 }
 
-function saveSmtpSettings(settings: SmtpSettings) {
-  localStorage.setItem(SMTP_STORAGE_KEY, JSON.stringify(settings))
+function loadEmailConfigs(): EmailRouteConfig[] {
+  const routes = loadEmailRoutes()
+  if (typeof window === 'undefined') return mergeRouteSettings(routes, {})
+
+  try {
+    const raw = localStorage.getItem(EMAIL_ROUTE_SETTINGS_STORAGE_KEY)
+    return mergeRouteSettings(routes, raw ? JSON.parse(raw) : {})
+  } catch {}
+
+  return mergeRouteSettings(routes, {})
+}
+
+function loadEmailConfigForCategory(category: string): EmailRouteConfig {
+  const configs = loadEmailConfigs()
+  const route = getEmailRouteForCategory(category, configs)
+  return configs.find((config) => config.id === route.id) || configs[0]
+}
+
+function saveEmailConfig(config: EmailRouteConfig) {
+  const configs = loadEmailConfigs().map((item) => (item.id === config.id ? config : item))
+  const routeOverrides = configs.map(({ id, email }) => ({ id, email }))
+  const settings = configs.reduce(
+    (acc, item) => {
+      acc[item.id] = {
+        enabled: item.enabled,
+        smtpHost: item.smtpHost,
+        smtpPort: item.smtpPort,
+        smtpUser: item.smtpUser,
+        smtpPass: item.smtpPass,
+        fromName: item.fromName,
+      }
+      return acc
+    },
+    {} as Record<EmailRouteId, EmailRouteSettings>,
+  )
+
+  localStorage.setItem(EMAIL_ROUTES_STORAGE_KEY, JSON.stringify(routeOverrides))
+  localStorage.setItem(EMAIL_ROUTE_SETTINGS_STORAGE_KEY, JSON.stringify(settings))
 }
 
 /* ------------------------------------------------------------------ */
@@ -85,8 +116,10 @@ export function EmailPitchDialog({
 }) {
   const { toast } = useToast()
 
-  // SMTP settings
-  const [smtp, setSmtp] = useState<SmtpSettings>(loadSmtpSettings)
+  // Email route settings
+  const [emailConfig, setEmailConfig] = useState<EmailRouteConfig>(() =>
+    loadEmailConfigForCategory(lead.category),
+  )
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Email content
@@ -99,7 +132,7 @@ export function EmailPitchDialog({
   // Initialize template when dialog opens
   useEffect(() => {
     if (open && lead) {
-      setSmtp(loadSmtpSettings())
+      setEmailConfig(loadEmailConfigForCategory(lead.category))
       setSent(false)
       setIsEditing(false)
       const template: EmailTemplate = getPitchTemplate(lead.category, {
@@ -119,17 +152,17 @@ export function EmailPitchDialog({
   }, [open, lead])
 
   const handleSaveSettings = useCallback(() => {
-    saveSmtpSettings(smtp)
+    saveEmailConfig(emailConfig)
     setSettingsOpen(false)
-    toast({ title: 'Settings saved', description: 'Your email settings are saved locally.' })
-  }, [smtp, toast])
+    toast({ title: 'Sender saved', description: `${emailConfig.email} is ready for ${emailConfig.label}.` })
+  }, [emailConfig, toast])
 
   const handleSend = async () => {
-    if (!smtp.smtpUser || !smtp.smtpPass) {
+    if (!emailConfig.enabled || !emailConfig.smtpUser || !emailConfig.smtpPass) {
       setSettingsOpen(true)
       toast({
-        title: 'Configure email first',
-        description: 'Add your email settings before sending.',
+        title: 'Configure sender first',
+        description: `Add SMTP settings for ${emailConfig.email}.`,
         variant: 'destructive',
       })
       return
@@ -144,11 +177,14 @@ export function EmailPitchDialog({
           to: lead.clientEmail,
           subject,
           body,
-          from: smtp.fromEmail || smtp.smtpUser,
-          smtpHost: smtp.smtpHost,
-          smtpPort: smtp.smtpPort,
-          smtpUser: smtp.smtpUser,
-          smtpPass: smtp.smtpPass,
+          from: emailConfig.email,
+          fromName: emailConfig.fromName,
+          smtpHost: emailConfig.smtpHost,
+          smtpPort: emailConfig.smtpPort,
+          smtpUser: emailConfig.smtpUser,
+          smtpPass: emailConfig.smtpPass,
+          routeId: emailConfig.id,
+          category: lead.category,
         }),
       })
       const result = await res.json()
@@ -157,7 +193,7 @@ export function EmailPitchDialog({
         setSent(true)
         toast({
           title: 'Email sent!',
-          description: `Pitch sent to ${lead.clientName} at ${lead.clientEmail}`,
+          description: `Sent from ${result.from || emailConfig.email} to ${lead.clientEmail}`,
         })
       } else {
         toast({
@@ -182,7 +218,7 @@ export function EmailPitchDialog({
     window.open(link, '_blank')
   }
 
-  const isConfigured = !!(smtp.smtpUser && smtp.smtpPass)
+  const isConfigured = !!(emailConfig.enabled && emailConfig.smtpUser && emailConfig.smtpPass)
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -194,7 +230,7 @@ export function EmailPitchDialog({
                 Send Pitch Email
               </DialogTitle>
               <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
-                to {lead.clientName} &lt;{lead.clientEmail}&gt;
+                from {emailConfig.email} to {lead.clientName} &lt;{lead.clientEmail}&gt;
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -226,41 +262,58 @@ export function EmailPitchDialog({
                 <AccordionTrigger className="py-0 hover:no-underline">
                   <div className="flex items-center gap-2">
                     <Settings className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium text-foreground">Your Email Settings (SMTP)</span>
+                    <span className="text-sm font-medium text-foreground">
+                      {emailConfig.label} Sender Settings
+                    </span>
                     {isConfigured && <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />}
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="mt-3 space-y-3 rounded-lg border border-border bg-[#111111] p-4">
-                    <p className="text-xs text-muted-foreground">
-                      Enter your email credentials to send pitches directly. Settings are saved locally on your device.
-                    </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Your Email (From)</Label>
+                        <Label className="text-xs text-muted-foreground">Sender Email</Label>
                         <Input
                           type="email"
-                          placeholder="arshad@abkreative.com"
-                          value={smtp.fromEmail}
-                          onChange={(e) => setSmtp((s) => ({ ...s, fromEmail: e.target.value }))}
+                          value={emailConfig.email}
+                          onChange={(e) =>
+                            setEmailConfig((config) => ({
+                              ...config,
+                              email: e.target.value,
+                              smtpUser:
+                                config.smtpUser === config.email ? e.target.value : config.smtpUser,
+                            }))
+                          }
+                          className="border-border bg-[#0A0A0A] text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">From Name</Label>
+                        <Input
+                          value={emailConfig.fromName}
+                          onChange={(e) =>
+                            setEmailConfig((config) => ({ ...config, fromName: e.target.value }))
+                          }
                           className="border-border bg-[#0A0A0A] text-sm"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">SMTP Host</Label>
                         <Input
-                          placeholder="smtp.gmail.com"
-                          value={smtp.smtpHost}
-                          onChange={(e) => setSmtp((s) => ({ ...s, smtpHost: e.target.value }))}
+                          value={emailConfig.smtpHost}
+                          onChange={(e) =>
+                            setEmailConfig((config) => ({ ...config, smtpHost: e.target.value }))
+                          }
                           className="border-border bg-[#0A0A0A] text-sm"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">SMTP Port</Label>
                         <Input
-                          placeholder="587"
-                          value={smtp.smtpPort}
-                          onChange={(e) => setSmtp((s) => ({ ...s, smtpPort: e.target.value }))}
+                          value={emailConfig.smtpPort}
+                          onChange={(e) =>
+                            setEmailConfig((config) => ({ ...config, smtpPort: e.target.value }))
+                          }
                           className="border-border bg-[#0A0A0A] text-sm"
                         />
                       </div>
@@ -268,29 +321,28 @@ export function EmailPitchDialog({
                         <Label className="text-xs text-muted-foreground">SMTP Username (Email)</Label>
                         <Input
                           type="email"
-                          placeholder="your@gmail.com"
-                          value={smtp.smtpUser}
-                          onChange={(e) => setSmtp((s) => ({ ...s, smtpUser: e.target.value }))}
+                          value={emailConfig.smtpUser}
+                          onChange={(e) =>
+                            setEmailConfig((config) => ({ ...config, smtpUser: e.target.value }))
+                          }
+                          className="border-border bg-[#0A0A0A] text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">App Password</Label>
+                        <Input
+                          type="password"
+                          value={emailConfig.smtpPass}
+                          onChange={(e) =>
+                            setEmailConfig((config) => ({ ...config, smtpPass: e.target.value }))
+                          }
                           className="border-border bg-[#0A0A0A] text-sm"
                         />
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">App Password (not your regular password)</Label>
-                      <Input
-                        type="password"
-                        placeholder="xxxx xxxx xxxx xxxx"
-                        value={smtp.smtpPass}
-                        onChange={(e) => setSmtp((s) => ({ ...s, smtpPass: e.target.value }))}
-                        className="border-border bg-[#0A0A0A] text-sm"
-                      />
-                      <p className="text-[11px] text-muted-foreground/70">
-                        Gmail: go to Google Account → Security → 2-Step Verification → App passwords → Create
-                      </p>
-                    </div>
                     <Button size="sm" variant="outline" onClick={handleSaveSettings} className="w-full border-border text-sm">
                       <Server className="mr-1.5 h-3.5 w-3.5" />
-                      Save Settings
+                      Save Sender
                     </Button>
                   </div>
                 </AccordionContent>
@@ -367,6 +419,7 @@ export function EmailPitchDialog({
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>Category: <strong className="text-foreground">{lead.category}</strong></span>
                 {lead.subcategory && <span>Type: <strong className="text-foreground">{lead.subcategory}</strong></span>}
+                <span>Sender: <strong className="text-foreground">{emailConfig.email}</strong></span>
                 <span>Budget: <strong className="text-[#D9FA54]">${lead.budgetMin.toLocaleString()} – ${lead.budgetMax.toLocaleString()}</strong></span>
                 <span>Location: <strong className="text-foreground">{lead.city || ''} {lead.country}</strong></span>
               </div>

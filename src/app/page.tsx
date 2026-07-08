@@ -7,6 +7,7 @@ import { Hero } from '@/components/site/hero'
 import { BrowseLeadsView } from '@/components/site/browse-leads-view'
 import { HowItWorks } from '@/components/site/how-it-works'
 import { LeadSourcesGuide } from '@/components/site/lead-sources-guide'
+import { EmailManagementDashboard } from '@/components/site/email-management-dashboard'
 import { HostingGuide } from '@/components/site/hosting-guide'
 import { PublicAccessGuide } from '@/components/site/public-access-guide'
 import { Footer } from '@/components/site/footer'
@@ -44,9 +45,16 @@ export default function Home() {
     setPostLeadOpen(true)
   }, [])
 
+  const handleEmailManagement = useCallback(() => {
+    setTimeout(() => {
+      const el = document.getElementById('email-management')
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+  }, [])
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <Header onPostLead={handlePostLead} />
+      <Header onPostLead={handlePostLead} onEmailManagement={handleEmailManagement} />
 
       <main className="flex-1">
         <Hero
@@ -63,6 +71,7 @@ export default function Home() {
         </div>
 
         <HowItWorks />
+        <EmailManagementDashboard />
         <LeadSourcesGuide />
         <PublicAccessGuide />
         <HostingGuide />
