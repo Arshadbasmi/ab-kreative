@@ -73,6 +73,7 @@ function isRateLimited(ip: string): boolean {
 // Category-specific search queries (all 15 categories, 3-5 queries each)
 // ---------------------------------------------------------------------------
 function getSearchQueries(category: string): string[] {
+  const year = new Date().getFullYear()
   const queries: Record<string, string[]> = {
     INTERIOR_DESIGN: [
       'interior design project hiring 2025',
@@ -110,18 +111,20 @@ function getSearchQueries(category: string): string[] {
       'Middle East ERP system implementation project needed',
     ],
     FITOUT: [
-      'UAE fit-out project tender 2025',
+      `UAE fit-out project tender ${year}`,
       'Dubai restaurant renovation contractor required',
       'Abu Dhabi office fit-out quotation request',
       'Sharjah retail shop fitout company needed',
       'UAE commercial fitout contractor contact email',
     ],
     FINANCE: [
-      'UAE business loan required 2025',
-      'Dubai credit card application salary transfer',
-      'Mortgage UAE expat looking',
-      'Abu Dhabi business financing required',
-      'UAE SME loan application project',
+      `UAE credit card wanted salary transfer ${year}`,
+      `Dubai personal loan needed expat ${year}`,
+      'UAE loan buyout debt consolidation enquiry',
+      'Abu Dhabi business loan SME finance required',
+      'Dubai credit card application minimum salary UAE',
+      'UAE auto loan personal finance looking',
+      'site:reddit.com/r/dubai UAE credit card personal loan',
     ],
     LOGISTICS: [
       'UAE freight forwarding company hiring 2025',
@@ -145,11 +148,13 @@ function getSearchQueries(category: string): string[] {
       'UAE visa processing business setup tender',
     ],
     VIRAL_PRODUCTS: [
-      'UAE trending products wholesale 2025',
-      'Dubai viral gadgets supplier required',
-      'Saudi Arabia e-commerce product sourcing',
-      'Middle East dropshipping product lookup',
-      'UAE social media viral product distributor',
+      `best selling dropshipping products ${year} supplier email`,
+      `UAE trending products dropshipping supplier ${year}`,
+      'Noon Amazon UAE best selling products wholesale supplier',
+      'TikTok shop winning products supplier dropshipping',
+      'beauty skincare car accessories kitchen gadgets dropshipping supplier',
+      'high margin low weight products wholesale distributor contact',
+      'Middle East ecommerce product sourcing dropshipping supplier',
     ],
     INVESTMENT: [
       'UAE investment opportunity looking 2025',
@@ -204,11 +209,11 @@ function getContactDiscoveryQueries(category: string, scope: MarketScope): strin
     TECHNICAL_DESIGN: ['CAD drafting company', 'MEP design consultant'],
     SOFTWARE_DEV: ['software development company', 'web development agency'],
     FITOUT: ['fit out contractor', 'interior fit out company'],
-    FINANCE: ['finance broker', 'business finance consultant'],
+    FINANCE: ['credit card UAE applicant enquiry', 'personal loan UAE enquiry'],
     LOGISTICS: ['freight forwarding company', 'logistics company'],
     UAE_APPROVALS: ['approval consultant', 'DCD approval consultant'],
     BUSINESS_SETUP: ['business setup consultant', 'company formation consultant'],
-    VIRAL_PRODUCTS: ['ecommerce supplier', 'wholesale product distributor'],
+    VIRAL_PRODUCTS: ['dropshipping supplier', 'trending products wholesale distributor'],
     INVESTMENT: ['investment company', 'real estate investment company'],
     REAL_ESTATE: ['real estate developer', 'property management company'],
     INVESTORS: ['family office', 'venture capital firm'],
@@ -243,6 +248,22 @@ function getContactDiscoveryQueries(category: string, scope: MarketScope): strin
   )
 }
 
+function getCategoryLeadIntent(category: string): string {
+  const intents: Record<string, string> = {
+    FINANCE: `Category-specific intent for FINANCE:
+- Find UAE people or UAE SMEs showing active buyer intent for credit cards, personal loans, auto loans, home loans, business loans, loan buyout, debt consolidation, balance transfer, or salary-transfer banking.
+- Strong signals include wording like "need", "looking for", "apply", "wanted", "recommend", "minimum salary", "loan buyout", "personal finance", "credit card approval", or "business loan required".
+- Do not return banks, finance brokers, generic bank product pages, or comparison websites as the lead unless the page contains a real applicant/enquiry contact. The desired lead is the person or company wanting finance, not another seller.`,
+    VIRAL_PRODUCTS: `Category-specific intent for VIRAL_PRODUCTS:
+- Treat this as the Dropshipping Products category.
+- Find current product-winner and supplier opportunities for an ecommerce/dropshipping setup: best-selling, high-margin, lightweight, social-media trending, Noon/Amazon UAE, TikTok Shop, beauty/skincare, fragrance, supplements, car accessories, phone gadgets, kitchen gadgets, home organization, bedding, activewear, baby/kids, pet care, crafts, and travel accessories.
+- The lead can be a supplier, wholesaler, distributor, manufacturer, or product sourcing partner with a real public contact email.
+- Describe the product angle clearly in the title/description and use subcategories such as "Beauty & Skincare Winners", "Car Accessories", "Kitchen Gadgets", "Noon / Amazon UAE Winners", "TikTok Shop Winners", or "Dropshipping Suppliers".`,
+  }
+
+  return intents[category] || ''
+}
+
 // ---------------------------------------------------------------------------
 // LLM system prompt for lead extraction
 // ---------------------------------------------------------------------------
@@ -263,6 +284,8 @@ function buildSystemPrompt(category: string, scope: MarketScope): string {
 Extract business leads from the provided web search results. Return ONLY valid JSON in the exact shape requested by the user message — no markdown, no explanation.
 
 ${targetMarket}
+
+${getCategoryLeadIntent(category)}
 
 Each lead object MUST have these fields:
 - title: string (short project title)

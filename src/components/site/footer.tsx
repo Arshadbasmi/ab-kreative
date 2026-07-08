@@ -10,8 +10,9 @@ const KEY_REGIONS = [
   { name: 'Sharjah', flag: '🇦🇪' },
   { name: 'Fitout UAE', flag: '🇦🇪' },
   { name: 'Advertising UAE', flag: '🇦🇪' },
-  { name: 'Credit Card UAE', flag: '🇦🇪' },
+  { name: 'Cards & Loans UAE', flag: '🇦🇪' },
   { name: 'Logistics UAE', flag: '🇦🇪' },
+  { name: 'Dropshipping Products', flag: '🌐' },
   { name: 'UAE Free Zones', flag: '🇦🇪' },
 ]
 
@@ -45,8 +46,8 @@ export function Footer() {
             </div>
             <p className="mt-4 max-w-md text-sm text-muted-foreground">
               Income-generating leads across key verticals: design worldwide,
-              plus UAE-focused fitout, advertising, credit card, logistics,
-              and approvals. Direct connections, real budgets.
+              plus UAE-focused fitout, advertising, credit cards, loans,
+              logistics, and approvals. Dropshipping product sourcing included.
             </p>
             <div className="mt-4 flex items-center gap-2">
               <a

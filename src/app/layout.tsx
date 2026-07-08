@@ -6,14 +6,14 @@ import { ThemeProvider } from "@/components/theme-provider";
 export const metadata: Metadata = {
   title: "AB Kreative — Lead Generation Platform",
   description:
-    "Income-generating leads across design, fitout, finance, logistics, and UAE approvals. Worldwide coverage.",
+    "Income-generating leads across design, fitout, cards, loans, logistics, UAE approvals, and dropshipping products.",
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
   openGraph: {
     title: "AB Kreative — Lead Generation Platform",
     description:
-      "Income-generating leads across design, fitout, finance, logistics, and UAE approvals. Worldwide coverage.",
+      "Income-generating leads across design, fitout, cards, loans, logistics, UAE approvals, and dropshipping products.",
     siteName: "AB Kreative",
     type: "website",
   },
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "AB Kreative — Lead Generation Platform",
     description:
-      "Income-generating leads across design, fitout, finance, logistics, and UAE approvals.",
+      "Income-generating leads across design, fitout, cards, loans, logistics, UAE approvals, and dropshipping products.",
   },
 };
 

@@ -10,6 +10,7 @@ import {
   CreditCard,
   Truck,
   ShieldCheck,
+  TrendingUp,
 } from 'lucide-react'
 
 const STEPS = [
@@ -52,8 +53,8 @@ const CATEGORY_CARDS = [
   },
   {
     icon: CreditCard,
-    name: 'Finance',
-    description: 'Credit card applications, business cards, and financial service leads.',
+    name: 'Cards & Loans',
+    description: 'UAE credit card, personal loan, business loan, and loan buyout leads.',
     color: '#E5318A',
     bgColor: 'rgba(229, 49, 138, 0.06)',
     borderColor: 'rgba(229, 49, 138, 0.15)',
@@ -73,6 +74,14 @@ const CATEGORY_CARDS = [
     color: '#F59E0B',
     bgColor: 'rgba(245, 158, 11, 0.06)',
     borderColor: 'rgba(245, 158, 11, 0.15)',
+  },
+  {
+    icon: TrendingUp,
+    name: 'Dropshipping',
+    description: 'Current product winners, supplier contacts, and ecommerce sourcing leads.',
+    color: '#EF4444',
+    bgColor: 'rgba(239, 68, 68, 0.06)',
+    borderColor: 'rgba(239, 68, 68, 0.15)',
   },
 ]
 
@@ -135,9 +144,9 @@ export function HowItWorks() {
             className="text-lg font-semibold text-foreground"
             style={{ fontFamily: 'var(--font-space-grotesk)' }}
           >
-            Five verticals. One platform.
+            Six verticals. One platform.
           </h3>
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {CATEGORY_CARDS.map((c, i) => {
               const Icon = c.icon
               return (

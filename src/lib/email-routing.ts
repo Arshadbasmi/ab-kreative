@@ -27,7 +27,7 @@ export const DEFAULT_EMAIL_ROUTES: EmailRoute[] = [
     id: 'design',
     label: 'Design',
     email: 'design@abkreative.com',
-    purpose: 'Design, 3D, technical design, software, and advertising pitches',
+    purpose: 'Design, 3D, software, advertising, and dropshipping product pitches',
     categories: [
       'INTERIOR_DESIGN',
       'VISUALIZATION_3D',
@@ -57,9 +57,9 @@ export const DEFAULT_EMAIL_ROUTES: EmailRoute[] = [
   },
   {
     id: 'finance',
-    label: 'Finance',
+    label: 'Cards & Loans',
     email: 'finance@abkreative.com',
-    purpose: 'Credit card and finance pitches',
+    purpose: 'Credit card, personal loan, business loan, and finance pitches',
     categories: ['FINANCE'],
   },
   {

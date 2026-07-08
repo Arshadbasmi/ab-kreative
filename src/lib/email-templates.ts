@@ -53,16 +53,30 @@ Best regards,
 Arshad | AB Kreative | www.abkreative.com`,
   },
 
-  // ── 3. CREDIT_CARD ───────────────────────────────────────────────────────
-  CREDIT_CARD: {
-    subject: "{{clientName}} — Smarter Payment Solutions via AB Kreative",
+  // ── 3. FINANCE ───────────────────────────────────────────────────────────
+  FINANCE: {
+    subject: "{{clientName}} — UAE Credit Card & Loan Options for {{projectTitle}}",
     body: `Hi {{clientName}},
 
-I saw your interest in "{{projectTitle}}" and wanted to connect. AB Kreative partners with leading banks to offer tailored credit card processing and financial solutions for businesses operating in the UAE.
+I saw your interest in "{{projectTitle}}" and wanted to connect. AB Kreative helps UAE residents and businesses find suitable credit card and loan options through trusted banking partners.
 
-Whether you need a reliable payment gateway, corporate card programs, or strategic banking partnerships, we streamline the entire process so you can focus on growth{{subcategory}}.
+Whether you are looking for a credit card, personal loan, business loan, auto finance, loan buyout, or debt consolidation, we can quickly check the right options for your profile{{subcategory}}. Final approval and eligibility remain subject to the bank's criteria.
 
-Let's set up a quick conversation to discuss the best options for your business. What does your calendar look like this week?
+Could you share your salary range, company name, and whether your salary is transferred to a UAE bank? I can then guide you to the most relevant options.
+
+Best regards,
+Arshad | AB Kreative | www.abkreative.com`,
+  },
+
+  CREDIT_CARD: {
+    subject: "{{clientName}} — UAE Credit Card & Loan Options for {{projectTitle}}",
+    body: `Hi {{clientName}},
+
+I saw your interest in "{{projectTitle}}" and wanted to connect. AB Kreative helps UAE residents and businesses find suitable credit card and loan options through trusted banking partners.
+
+Whether you are looking for a credit card, personal loan, business loan, auto finance, loan buyout, or debt consolidation, we can quickly check the right options for your profile{{subcategory}}. Final approval and eligibility remain subject to the bank's criteria.
+
+Could you share your salary range, company name, and whether your salary is transferred to a UAE bank? I can then guide you to the most relevant options.
 
 Best regards,
 Arshad | AB Kreative | www.abkreative.com`,
@@ -108,6 +122,21 @@ I noticed your interest in "{{projectTitle}}" and wanted to connect. Setting up 
 We handle everything: company formation, free zone and mainland licensing, visa processing, PRO services, golden visa applications, and corporate bank account setup{{subcategory}}. Our clients get a seamless, end-to-end experience from day one.
 
 I'd love to walk you through your best options based on your goals. Can we schedule a quick call this week?
+
+Best regards,
+Arshad | AB Kreative | www.abkreative.com`,
+  },
+
+  // ── 7. VIRAL_PRODUCTS / DROPSHIPPING ────────────────────────────────────
+  VIRAL_PRODUCTS: {
+    subject: "{{clientName}} — Dropshipping Product Sourcing for {{projectTitle}}",
+    body: `Hi {{clientName}},
+
+I came across "{{projectTitle}}" and wanted to connect. AB Kreative is building ecommerce and dropshipping product pipelines for fast-moving UAE and international markets.
+
+We are especially interested in high-margin, lightweight, trending products{{subcategory}} with reliable supply, clear pricing, fast dispatch, and reseller or dropshipping support.
+
+Could you share your product catalog, MOQ, wholesale pricing, shipping options, and whether you support dropshipping or white-label supply?
 
 Best regards,
 Arshad | AB Kreative | www.abkreative.com`,

@@ -85,8 +85,9 @@ export function Hero({
           {/* Subtitle */}
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
             AB Kreative sources design opportunities worldwide, while fitout,
-            advertising, credit card, and logistics leads stay focused on the UAE.
-            Real contacts, real budgets, real timelines.
+            advertising, credit card, loan, and logistics leads stay focused on
+            the UAE. Dropshipping product sourcing finds current market winners
+            and supplier contacts.
           </p>
 
           {/* CTAs */}
