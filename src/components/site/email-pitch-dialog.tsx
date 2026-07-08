@@ -143,7 +143,8 @@ export function EmailPitchDialog({
   // Initialize template when dialog opens
   useEffect(() => {
     if (open && lead) {
-      setEmailConfig(loadEmailConfigForCategory(lead.category))
+      const loadedConfig = loadEmailConfigForCategory(lead.category)
+      setEmailConfig(loadedConfig)
       setSent(false)
       setIsEditing(false)
       const template: EmailTemplate = getPitchTemplate(lead.category, {
@@ -156,6 +157,7 @@ export function EmailPitchDialog({
         currency: lead.currency,
         country: lead.country,
         city: lead.city,
+        senderName: loadedConfig.fromName,
       })
       setSubject(template.subject)
       setBody(template.body)
@@ -211,6 +213,8 @@ export function EmailPitchDialog({
           smtpPass: emailConfig.smtpPass,
           routeId: emailConfig.id,
           category: lead.category,
+          bcc: emailConfig.email,
+          replyTo: emailConfig.email,
         }),
       })
       const result = await res.json()

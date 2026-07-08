@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
       smtpPass,
       routeId,
       category,
+      bcc,
+      replyTo,
     } = body
 
     // Validate required fields
@@ -52,6 +54,8 @@ export async function POST(request: NextRequest) {
     const info = await transporter.sendMail({
       from: `"${fromName}" <${senderEmail}>`,
       to,
+      bcc: bcc || senderEmail,
+      replyTo: replyTo || senderEmail,
       subject,
       text: emailBody,
     })
@@ -60,6 +64,7 @@ export async function POST(request: NextRequest) {
       success: true,
       messageId: info.messageId,
       from: senderEmail,
+      copiedTo: bcc || senderEmail,
       routeId,
       category,
       message: `Email sent successfully to ${to}`,

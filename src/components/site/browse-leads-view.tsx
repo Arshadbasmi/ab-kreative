@@ -23,11 +23,13 @@ import {
   Building,
   HandCoins,
   Megaphone,
+  MailCheck,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -46,6 +48,17 @@ import {
   getCategoryMeta,
   type Lead,
 } from '@/lib/constants'
+import { getPitchTemplate } from '@/lib/email-templates'
+import {
+  DEFAULT_EMAIL_ROUTES,
+  EMAIL_ROUTES_STORAGE_KEY,
+  EMAIL_ROUTE_SETTINGS_STORAGE_KEY,
+  getEmailRouteForCategory,
+  mergeEmailRoutes,
+  mergeRouteSettings,
+  type EmailRoute,
+  type EmailRouteConfig,
+} from '@/lib/email-routing'
 import { motion } from 'framer-motion'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -90,6 +103,54 @@ const DAILY_MAX_GENERATION_PLAN = [
   { category: 'INVESTORS', count: 3 },
 ]
 
+type GeneratedPitchLead = Pick<
+  Lead,
+  | 'category'
+  | 'clientName'
+  | 'clientCompany'
+  | 'clientEmail'
+  | 'title'
+  | 'subcategory'
+  | 'budgetMin'
+  | 'budgetMax'
+  | 'currency'
+  | 'country'
+  | 'city'
+>
+
+function loadEmailRoutes(): EmailRoute[] {
+  if (typeof window === 'undefined') return DEFAULT_EMAIL_ROUTES
+
+  try {
+    const raw = localStorage.getItem(EMAIL_ROUTES_STORAGE_KEY)
+    return mergeEmailRoutes(raw ? JSON.parse(raw) : [])
+  } catch {
+    return DEFAULT_EMAIL_ROUTES
+  }
+}
+
+function loadEmailConfigs(): EmailRouteConfig[] {
+  const routes = loadEmailRoutes()
+  if (typeof window === 'undefined') return mergeRouteSettings(routes, {})
+
+  try {
+    const raw = localStorage.getItem(EMAIL_ROUTE_SETTINGS_STORAGE_KEY)
+    return mergeRouteSettings(routes, raw ? JSON.parse(raw) : {})
+  } catch {
+    return mergeRouteSettings(routes, {})
+  }
+}
+
+function loadEmailConfigForLead(category: string): EmailRouteConfig {
+  const configs = loadEmailConfigs()
+  const route = getEmailRouteForCategory(category, configs)
+  return configs.find((config) => config.id === route.id) || configs[0]
+}
+
+function canSendAutoPitch(config: EmailRouteConfig | undefined) {
+  return Boolean(config?.enabled && config.smtpHost && config.smtpUser && config.smtpPass)
+}
+
 export function BrowseLeadsView() {
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('ALL')
@@ -104,6 +165,7 @@ export function BrowseLeadsView() {
   const [todayOnly, setTodayOnly] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingLabel, setGeneratingLabel] = useState('')
+  const [autoPitchEnabled, setAutoPitchEnabled] = useState(false)
 
   const qs = useMemo(() => {
     const params = new URLSearchParams()
@@ -188,6 +250,60 @@ export function BrowseLeadsView() {
 
   const activeSubcategories = category !== 'ALL' ? SUBCATEGORIES[category] || [] : []
 
+  const sendFirstPitch = useCallback(async (lead: GeneratedPitchLead) => {
+    if (!lead.clientEmail || !/\S+@\S+\.\S+/.test(lead.clientEmail)) {
+      return { status: 'skipped' as const, error: 'Lead email missing' }
+    }
+
+    const emailConfig = loadEmailConfigForLead(lead.category)
+    if (!canSendAutoPitch(emailConfig)) {
+      return { status: 'skipped' as const, error: `${emailConfig.email} SMTP not configured` }
+    }
+
+    const template = getPitchTemplate(lead.category, {
+      clientName: lead.clientName,
+      title: lead.title,
+      clientCompany: lead.clientCompany,
+      subcategory: lead.subcategory,
+      budgetMin: lead.budgetMin,
+      budgetMax: lead.budgetMax,
+      currency: lead.currency,
+      country: lead.country,
+      city: lead.city,
+      senderName: emailConfig.fromName,
+    })
+
+    const res = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: lead.clientEmail,
+        subject: template.subject,
+        body: template.body,
+        from: emailConfig.email,
+        fromName: emailConfig.fromName,
+        smtpHost: emailConfig.smtpHost,
+        smtpPort: emailConfig.smtpPort,
+        smtpUser: emailConfig.smtpUser,
+        smtpPass: emailConfig.smtpPass,
+        routeId: emailConfig.id,
+        category: lead.category,
+        bcc: emailConfig.email,
+        replyTo: emailConfig.email,
+      }),
+    })
+
+    const result = await res.json().catch(() => ({}))
+    if (!res.ok || !result.success) {
+      return {
+        status: 'failed' as const,
+        error: result.error || 'Pitch email failed',
+      }
+    }
+
+    return { status: 'sent' as const }
+  }, [])
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Search bar */}
@@ -230,6 +346,21 @@ export function BrowseLeadsView() {
         >
           📅 Today
         </Button>
+        <div
+          className={`flex h-11 items-center gap-2 rounded-md border px-3 text-xs font-medium ${
+            autoPitchEnabled
+              ? 'border-[#D9FA54]/40 bg-[#D9FA54]/10 text-[#D9FA54]'
+              : 'border-border bg-[#111111] text-muted-foreground'
+          }`}
+        >
+          <Switch
+            checked={autoPitchEnabled}
+            onCheckedChange={setAutoPitchEnabled}
+            aria-label="Auto first pitch"
+          />
+          <MailCheck className="h-4 w-4" />
+          <span className="whitespace-nowrap">Auto first pitch</span>
+        </div>
         <Button
           variant="outline"
           disabled={generating}
@@ -245,6 +376,10 @@ export function BrowseLeadsView() {
               let failedCount = 0
               let generatedCount = 0
               let rejectedCount = 0
+              let autoSentCount = 0
+              let autoSkippedCount = 0
+              let autoFailedCount = 0
+              let autoPitchMessage = ''
               const failedCategories: string[] = []
               let quotaExhausted = false
               let quotaMessage = ''
@@ -284,6 +419,18 @@ export function BrowseLeadsView() {
 
                   if (saveRes.ok) {
                     savedCount++
+                    if (autoPitchEnabled) {
+                      const pitchResult = await sendFirstPitch(lead as GeneratedPitchLead)
+                      if (pitchResult.status === 'sent') {
+                        autoSentCount++
+                      } else if (pitchResult.status === 'skipped') {
+                        autoSkippedCount++
+                        autoPitchMessage ||= pitchResult.error
+                      } else {
+                        autoFailedCount++
+                        autoPitchMessage ||= pitchResult.error
+                      }
+                    }
                   } else {
                     failedCount++
                   }
@@ -293,14 +440,18 @@ export function BrowseLeadsView() {
               if (savedCount > 0) {
                 mutate()
                 mutateAnalytics()
+                const autoPitchSummary = autoPitchEnabled
+                  ? ` Auto pitch: ${autoSentCount} sent${autoSkippedCount ? `, ${autoSkippedCount} skipped` : ''}${autoFailedCount ? `, ${autoFailedCount} failed` : ''}${autoPitchMessage ? ` (${autoPitchMessage})` : ''}.`
+                  : ''
                 toast({
                   title: `${savedCount} verified lead${savedCount === 1 ? '' : 's'} saved`,
                   description:
-                    category === 'ALL'
+                    (category === 'ALL'
                       ? `Daily max ran all categories, design first. Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`
                       : failedCount > 0
                         ? `${failedCount} generated lead${failedCount === 1 ? '' : 's'} could not be saved.`
-                        : `Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`,
+                        : `Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`) +
+                    autoPitchSummary,
                 })
               } else if (generatedCount > 0) {
                 toast({

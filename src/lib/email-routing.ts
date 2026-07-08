@@ -89,7 +89,7 @@ export const DEFAULT_EMAIL_ROUTES: EmailRoute[] = [
   {
     id: 'logistics',
     label: 'Logistics',
-    email: 'waji@abkreative.com',
+    email: 'wajid@abkreative.com',
     purpose: 'Logistics, shipping, and freight pitches',
     categories: ['LOGISTICS'],
   },
@@ -115,7 +115,7 @@ export function getDefaultRouteSettings(route: EmailRoute): EmailRouteSettings {
     smtpPort: domainPreset.port,
     smtpUser: route.email,
     smtpPass: '',
-    fromName: 'AB Kreative',
+    fromName: route.id === 'logistics' ? 'Wajid' : 'Arshad',
   }
 }
 
@@ -126,9 +126,14 @@ export function getEmailProviderPreset(providerId: EmailProviderId) {
 export function mergeEmailRoutes(overrides: Partial<EmailRoute>[]): EmailRoute[] {
   return DEFAULT_EMAIL_ROUTES.map((route) => {
     const override = overrides.find((item) => item.id === route.id)
+    const migratedOverride =
+      route.id === 'logistics' && override?.email === 'waji@abkreative.com'
+        ? { ...override, email: route.email }
+        : override
+
     return {
       ...route,
-      ...override,
+      ...migratedOverride,
       id: route.id,
       categories: route.categories,
     }
@@ -141,13 +146,27 @@ export function mergeRouteSettings(
 ): EmailRouteConfig[] {
   return routes.map((route) => {
     const savedSettings = settings[route.id] || {}
+    const migratedSettings =
+      route.id === 'logistics'
+        ? {
+            ...savedSettings,
+            smtpUser:
+              !savedSettings.smtpUser || savedSettings.smtpUser === 'waji@abkreative.com'
+                ? route.email
+                : savedSettings.smtpUser,
+            fromName:
+              !savedSettings.fromName || savedSettings.fromName === 'Arshad'
+                ? 'Wajid'
+                : savedSettings.fromName,
+          }
+        : savedSettings
     const config = {
       ...route,
       ...getDefaultRouteSettings(route),
-      ...savedSettings,
+      ...migratedSettings,
     }
 
-    if (!savedSettings.smtpProvider && config.smtpHost === 'smtp.gmail.com') {
+    if (!migratedSettings.smtpProvider && config.smtpHost === 'smtp.gmail.com') {
       const domainPreset = getEmailProviderPreset('domain')
       return {
         ...config,

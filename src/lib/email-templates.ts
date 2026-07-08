@@ -18,6 +18,7 @@ export type PitchContext = {
   currency?: string
   country?: string
   city?: string | null
+  senderName?: string | null
 }
 
 // ─── Templates ───────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ From interior and architectural design to brand identity, 3D visualization, and 
 I'd love to learn more about your vision and explore how we can make it happen. Are you available for a quick call this week?
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 
   // ── 2. FITOUT ────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ We handle full-scale interior fitouts, construction, renovation, and MEP works a
 I'd appreciate the chance to discuss your requirements in more detail. Could we schedule a brief call to explore how we can support you?
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 
   // ── 3. FINANCE ───────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ Whether you are looking for a credit card, personal loan, business loan, auto fi
 Could you share your salary range, company name, and whether your salary is transferred to a UAE bank? I can then guide you to the most relevant options.
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 
   CREDIT_CARD: {
@@ -79,7 +80,7 @@ Whether you are looking for a credit card, personal loan, business loan, auto fi
 Could you share your salary range, company name, and whether your salary is transferred to a UAE bank? I can then guide you to the most relevant options.
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 
   // ── 4. LOGISTICS ─────────────────────────────────────────────────────────
@@ -94,7 +95,7 @@ We provide comprehensive logistics solutions across the UAE — freight forwardi
 I'd welcome the opportunity to understand your logistics needs and show you how we can optimize them. Would a short call work for you this week?
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 
   // ── 5. UAE_APPROVALS ─────────────────────────────────────────────────────
@@ -109,7 +110,7 @@ We handle the full spectrum: municipality approvals, DCD, DEWA, Trakhees, and ev
 I'd like to discuss how we can accelerate your approvals. Are you open to a brief call this week?
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 
   // ── 6. DUBAI_BUSINESS_SETUP ──────────────────────────────────────────────
@@ -124,7 +125,7 @@ We handle everything: company formation, free zone and mainland licensing, visa 
 I'd love to walk you through your best options based on your goals. Can we schedule a quick call this week?
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 
   // ── 7. VIRAL_PRODUCTS / DROPSHIPPING ────────────────────────────────────
@@ -139,7 +140,7 @@ We are especially interested in high-margin, lightweight, trending products{{sub
 Could you share your product catalog, MOQ, wholesale pricing, shipping options, and whether you support dropshipping or white-label supply?
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+{{senderName}} | AB Kreative | www.abkreative.com`,
   },
 }
 
@@ -167,6 +168,7 @@ function formatLocation(ctx: PitchContext): string {
 function resolvePlaceholders(text: string, ctx: PitchContext): string {
   const budget = formatBudget(ctx)
   const location = formatLocation(ctx)
+  const senderName = ctx.senderName?.trim() || "Arshad"
 
   // Build a dynamic subcategory mention (e.g. ", particularly in 3D visualization")
   const subcategoryClause =
@@ -181,12 +183,14 @@ function resolvePlaceholders(text: string, ctx: PitchContext): string {
     .replace(/\{\{subcategory\}\}/g, subcategoryClause)
     .replace(/\{\{budget\}\}/g, budget)
     .replace(/\{\{location\}\}/g, location)
+    .replace(/\{\{senderName\}\}/g, senderName)
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export function getPitchTemplate(category: string, lead: PitchContext): EmailTemplate {
   const template = EMAIL_TEMPLATES[category]
+  const senderName = lead.senderName?.trim() || "Arshad"
 
   if (!template) {
     return {
@@ -198,7 +202,7 @@ Thank you for your interest in "${lead.title}"${lead.clientCompany ? ` at ${lead
 Could we schedule a brief call to explore the right solution for you?
 
 Best regards,
-Arshad | AB Kreative | www.abkreative.com`,
+${senderName} | AB Kreative | www.abkreative.com`,
     }
   }
 
