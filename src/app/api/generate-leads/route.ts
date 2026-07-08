@@ -15,6 +15,7 @@ type ContactEvidence = {
   emails: string[]
   phones: string[]
   pageChecked: boolean
+  evidenceUrl: string | null
 }
 
 type SearchEvidence = {
@@ -169,12 +170,46 @@ function getSearchQueries(category: string): string[] {
   ]
 }
 
+function getContactDiscoveryQueries(category: string): string[] {
+  const terms: Record<string, string[]> = {
+    INTERIOR_DESIGN: ['interior design studio', 'villa interior designer'],
+    VISUALIZATION_3D: ['3D rendering studio', 'architectural visualization company'],
+    DESIGN_SERVICES: ['branding agency', 'graphic design studio'],
+    TECHNICAL_DESIGN: ['CAD drafting company', 'MEP design consultant'],
+    SOFTWARE_DEV: ['software development company', 'web development agency'],
+    FITOUT: ['fit out contractor', 'interior fit out company'],
+    FINANCE: ['finance broker', 'business finance consultant'],
+    LOGISTICS: ['freight forwarding company', 'logistics company'],
+    UAE_APPROVALS: ['approval consultant', 'DCD approval consultant'],
+    BUSINESS_SETUP: ['business setup consultant', 'company formation consultant'],
+    VIRAL_PRODUCTS: ['ecommerce supplier', 'wholesale product distributor'],
+    INVESTMENT: ['investment company', 'real estate investment company'],
+    REAL_ESTATE: ['real estate developer', 'property management company'],
+    INVESTORS: ['family office', 'venture capital firm'],
+    ADVERTISING: ['signage company', 'advertising production company'],
+  }
+
+  const [primary, secondary = primary] = terms[category] || [
+    category.toLowerCase().replace(/_/g, ' '),
+  ]
+
+  return Array.from(
+    new Set([
+      `Dubai ${primary} contact email`,
+      `UAE ${primary} contact us email`,
+      `site:.ae "${primary}" "email"`,
+      `Saudi Arabia ${secondary} contact email`,
+      `Qatar ${primary} company email`,
+    ]),
+  )
+}
+
 // ---------------------------------------------------------------------------
 // LLM system prompt for lead extraction
 // ---------------------------------------------------------------------------
 function buildSystemPrompt(category: string): string {
   return `You are a lead generation AI for AB Kreative, a UAE-based lead generation company.
-Extract business leads from the provided web search results. Return ONLY a valid JSON array of lead objects — no markdown, no explanation, just the raw JSON array.
+Extract business leads from the provided web search results. Return ONLY valid JSON in the exact shape requested by the user message — no markdown, no explanation.
 
 Each lead object MUST have these fields:
 - title: string (short project title)
@@ -200,9 +235,11 @@ Rules:
 - Set realistic budgets based on the project scope (e.g., fitout projects $10K-$500K+, design $2K-$50K, finance leads $0 budget range, etc.)
 - Only extract leads that are genuinely implied by the search results
 - Do NOT fabricate fake company names, contacts, emails, phone numbers, URLs, or project details
+- Generic business inboxes such as info@real-domain.com are allowed only when found verbatim on the public source page; never infer an email from a domain
 - Do NOT use placeholder or guessed emails such as contact@company.com, info@company.com, hello@company.com, sales@company.com, or any email inferred from a domain
 - Skip any lead that does not include both a traceable sourceUrl and a real contact email visible in the results
-- If no genuine leads can be extracted from the results, return an empty array []
+- If an active project/tender is not visible, a verified prospect company/contact page is valid. In that case, describe the lead as a prospect opportunity without inventing a requested project.
+- If no genuine leads can be extracted from the results, return an empty result in the requested JSON shape
 - Set "AE" as the default country and "GCC" as the default region if location is unclear
 - Return valid JSON only — no backticks, no markdown code fences`
 }
@@ -254,7 +291,7 @@ Use Google Search to find current public business leads for this query:
 Return a JSON object with exactly this shape:
 {"leads":[ ...lead objects... ]}
 
-Find at most ${requestedCount} leads for this query. The sourceUrl must be the public page where the opportunity/contact evidence was found. The clientEmail must be visible on that exact source page. If you cannot find verified contact evidence, return {"leads":[]}.`
+Find at most ${requestedCount} leads for this query. Prefer active RFQs, tenders, hiring notices, or service requests. If those are not visible, return verified prospect companies whose public contact/about page shows a real email and whose business context matches this category. The sourceUrl must be the public page where the opportunity/contact evidence was found. The clientEmail must be visible on that exact source page. If you cannot find verified contact evidence, return {"leads":[]}.`
 }
 
 function asString(value: unknown): string {
@@ -349,9 +386,12 @@ function normalizeCountry(value: unknown): string {
   return aliases[country] || 'AE'
 }
 
-async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
+async function fetchEvidencePage(
+  sourceUrl: string,
+  timeoutMs: number,
+): Promise<{ text: string; finalUrl: string } | null> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 5_000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const response = await fetch(sourceUrl, {
@@ -365,20 +405,88 @@ async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
 
     const contentType = response.headers.get('content-type') || ''
     if (!response.ok || !/(html|text|json|xml)/i.test(contentType)) {
-      return { emails: [], phones: [], pageChecked: true }
+      return { text: '', finalUrl: response.url || sourceUrl }
     }
 
     const text = (await response.text()).slice(0, 500_000)
-    return {
-      emails: extractEmails(text),
-      phones: extractPhones(text),
-      pageChecked: true,
-    }
+    return { text, finalUrl: response.url || sourceUrl }
   } catch {
-    return { emails: [], phones: [], pageChecked: false }
+    return null
   } finally {
     clearTimeout(timeout)
   }
+}
+
+function extractSameSiteContactLinks(html: string, baseUrl: string): string[] {
+  const base = new URL(baseUrl)
+  const links: string[] = []
+  const hrefRe = /href=["']([^"']+)["']/gi
+  let match: RegExpExecArray | null
+
+  while ((match = hrefRe.exec(html))) {
+    const href = match[1]
+    if (!href || href.startsWith('mailto:') || href.startsWith('tel:')) continue
+
+    try {
+      const url = new URL(href, base)
+      const normalized = normalizePublicUrl(url.toString())
+      if (!normalized) continue
+
+      const normalizedUrl = new URL(normalized)
+      if (normalizedUrl.origin !== base.origin) continue
+
+      const path = `${normalizedUrl.pathname} ${normalizedUrl.search}`.toLowerCase()
+      if (!/(contact|contact-us|contactus|get-in-touch|enquiry|inquiry|about)/i.test(path)) {
+        continue
+      }
+
+      links.push(normalized)
+    } catch {
+      continue
+    }
+  }
+
+  return unique(links).slice(0, 4)
+}
+
+async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
+  const sourcePage = await fetchEvidencePage(sourceUrl, 5_000)
+  if (!sourcePage) {
+    return { emails: [], phones: [], pageChecked: false, evidenceUrl: null }
+  }
+
+  const sourceEmails = extractEmails(sourcePage.text)
+  let phones = extractPhones(sourcePage.text)
+
+  if (sourceEmails.length > 0) {
+    return {
+      emails: sourceEmails,
+      phones,
+      pageChecked: true,
+      evidenceUrl: sourcePage.finalUrl,
+    }
+  }
+
+  const contactLinks = extractSameSiteContactLinks(sourcePage.text, sourcePage.finalUrl)
+  for (const contactUrl of contactLinks) {
+    const contactPage = await fetchEvidencePage(contactUrl, 4_000)
+    if (!contactPage) continue
+
+    const contactEmails = extractEmails(contactPage.text)
+    const contactPhones = extractPhones(contactPage.text)
+    phones = unique([...phones, ...contactPhones])
+
+    if (contactEmails.length > 0) {
+      return {
+        emails: contactEmails,
+        phones,
+        pageChecked: true,
+        evidenceUrl: contactPage.finalUrl,
+      }
+    }
+  }
+
+  return { emails: [], phones, pageChecked: true, evidenceUrl: sourcePage.finalUrl }
 }
 
 function selectVerifiedEmail(candidateEmail: unknown, evidenceEmails: string[]): string | null {
@@ -475,10 +583,11 @@ async function verifyLeadCandidates(
       continue
     }
 
+    const verifiedSourceUrl = pageEvidence.evidenceUrl || sourceUrl
     const verifiedLead = buildVerifiedLead(
       rawLead,
       category,
-      sourceUrl,
+      verifiedSourceUrl,
       clientEmail,
       selectVerifiedPhone(rawLead.clientPhone, evidencePhones),
     )
@@ -582,8 +691,9 @@ async function generateWithGemini(
   const queriesTried: string[] = []
   let rejectedCandidates = 0
   let pagesChecked = 0
+  const queryPlan = unique([...getContactDiscoveryQueries(category), ...searchQueries]).slice(0, 8)
 
-  for (const query of searchQueries) {
+  for (const query of queryPlan) {
     if (allLeads.length >= requestedCount) break
     queriesTried.push(query)
 
