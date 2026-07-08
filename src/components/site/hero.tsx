@@ -3,7 +3,16 @@
 import { ArrowRight, TrendingUp, Layers, Globe, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion } from 'framer-motion'
-import { COUNTRIES, REGIONS, getTotalCategories } from '@/lib/constants'
+import { getTotalCategories } from '@/lib/constants'
+
+const KEY_EMIRATES = [
+  { code: 'global-design', name: 'Design worldwide', flag: '🌐' },
+  { code: 'dubai', name: 'Dubai', flag: '🇦🇪' },
+  { code: 'abu-dhabi', name: 'Abu Dhabi', flag: '🇦🇪' },
+  { code: 'sharjah', name: 'Sharjah', flag: '🇦🇪' },
+  { code: 'ajman', name: 'Ajman', flag: '🇦🇪' },
+  { code: 'uae-services', name: 'UAE services', flag: '🇦🇪' },
+]
 
 export function Hero({
   totalLeads,
@@ -22,10 +31,6 @@ export function Hero({
 }) {
   const pipelineK = Math.round(totalPipelineValue / 1000)
 
-  const regionsCovered = leadsByRegion.filter(
-    (r) => r.region && r.region !== 'ALL'
-  ).length
-
   const stats = [
     {
       label: 'Total leads',
@@ -38,8 +43,8 @@ export function Hero({
       icon: Layers,
     },
     {
-      label: 'Regions covered',
-      value: (regionsCovered || 10).toString(),
+      label: 'Market scope',
+      value: 'Global + UAE',
       icon: Globe,
     },
     {
@@ -48,8 +53,6 @@ export function Hero({
       icon: DollarSign,
     },
   ]
-
-  const keyRegions = COUNTRIES.slice(0, 6)
 
   return (
     <section className="relative overflow-hidden border-b border-border grid-pattern">
@@ -67,7 +70,7 @@ export function Hero({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
             </span>
-            Live across 10+ regions worldwide
+            Design worldwide. Key services UAE-first.
           </div>
 
           {/* Headline */}
@@ -76,14 +79,14 @@ export function Hero({
             style={{ fontFamily: 'var(--font-space-grotesk)' }}
           >
             Income-generating leads from{' '}
-            <span className="signal-text">every corner of the market</span>
+            <span className="signal-text">global design and UAE service markets</span>
           </h1>
 
           {/* Subtitle */}
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            AB Kreative sources genuine leads across fifteen verticals — design, fitout,
-            finance, tech, real estate, and more. Real projects, real
-            budgets, real timelines.
+            AB Kreative sources design opportunities worldwide, while fitout,
+            advertising, credit card, and logistics leads stay focused on the UAE.
+            Real contacts, real budgets, real timelines.
           </p>
 
           {/* CTAs */}
@@ -108,7 +111,7 @@ export function Hero({
 
           {/* Region chips */}
           <div className="mt-8 flex flex-wrap items-center gap-1.5">
-            {keyRegions.map((c) => (
+            {KEY_EMIRATES.map((c) => (
               <span
                 key={c.code}
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[#111111]/60 px-2.5 py-1 text-xs font-medium text-muted-foreground"
@@ -118,7 +121,7 @@ export function Hero({
               </span>
             ))}
             <span className="inline-flex items-center rounded-full border border-border bg-[#111111]/60 px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              +{COUNTRIES.length - 6} more
+              +UAE free zones
             </span>
           </div>
         </motion.div>

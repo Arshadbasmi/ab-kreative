@@ -16,6 +16,8 @@ type ContactEvidence = {
   phones: string[]
   pageChecked: boolean
   evidenceUrl: string | null
+  hasUaeSignal: boolean
+  hasNonUaeSignal: boolean
 }
 
 type SearchEvidence = {
@@ -29,6 +31,21 @@ type GenerationResult = {
   rejectedCandidates: number
   pagesChecked: number
   provider: 'gemini' | 'zai'
+}
+
+type MarketScope = 'global' | 'uae'
+
+const UAE_ONLY_CATEGORIES = new Set([
+  'FITOUT',
+  'FINANCE',
+  'LOGISTICS',
+  'UAE_APPROVALS',
+  'BUSINESS_SETUP',
+  'ADVERTISING',
+])
+
+function getMarketScope(category: string): MarketScope {
+  return UAE_ONLY_CATEGORIES.has(category) ? 'uae' : 'global'
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +74,7 @@ function isRateLimited(ip: string): boolean {
 function getSearchQueries(category: string): string[] {
   const queries: Record<string, string[]> = {
     INTERIOR_DESIGN: [
-      'UAE interior design project hiring 2025',
+      'interior design project hiring 2025',
       'Dubai villa interior design company looking',
       'Saudi Arabia residential interior design required',
       'Qatar hotel interior design contractor needed',
@@ -71,21 +88,21 @@ function getSearchQueries(category: string): string[] {
       'Middle East real estate 3D visualization tender',
     ],
     DESIGN_SERVICES: [
-      'UAE graphic design project hiring 2025',
+      'graphic design project hiring 2025',
       'Dubai brand identity design company required',
       'Saudi Arabia logo design agency looking',
       'UAE packaging design project needed',
       'Middle East marketing material design tender',
     ],
     TECHNICAL_DESIGN: [
-      'UAE CAD drafting project hiring',
+      'CAD drafting project hiring',
       'Dubai MEP design consultant required',
       'Saudi Arabia structural design engineer needed',
       'UAE shop drawing preparation company looking',
       'Middle East architecture technical drawing tender',
     ],
     SOFTWARE_DEV: [
-      'UAE software development project hiring 2025',
+      'software development project hiring 2025',
       'Dubai web development company looking',
       'Saudi Arabia mobile app development required',
       'UAE custom software development tender',
@@ -95,22 +112,22 @@ function getSearchQueries(category: string): string[] {
       'UAE fit-out project tender 2025',
       'Dubai restaurant renovation contractor required',
       'Abu Dhabi office fit-out quotation request',
-      'Saudi Arabia retail shop fitout company needed',
-      'Jeddah commercial fitout project hiring',
+      'Sharjah retail shop fitout company needed',
+      'UAE commercial fitout contractor contact email',
     ],
     FINANCE: [
       'UAE business loan required 2025',
       'Dubai credit card application salary transfer',
       'Mortgage UAE expat looking',
-      'Saudi Arabia business financing required',
+      'Abu Dhabi business financing required',
       'UAE SME loan application project',
     ],
     LOGISTICS: [
       'UAE freight forwarding company hiring 2025',
       'Dubai warehousing and storage required',
-      'Saudi Arabia last mile delivery company looking',
+      'Abu Dhabi last mile delivery company looking',
       'UAE cold chain logistics project needed',
-      'Middle East e-commerce fulfillment tender',
+      'Sharjah e-commerce fulfillment company contact',
     ],
     UAE_APPROVALS: [
       'UAE municipality approval service required',
@@ -122,7 +139,7 @@ function getSearchQueries(category: string): string[] {
     BUSINESS_SETUP: [
       'Dubai company formation service required 2025',
       'UAE free zone business setup looking',
-      'Saudi Arabia company registration project needed',
+      'Abu Dhabi company registration consultant contact',
       'Dubai mainland license company hiring',
       'UAE visa processing business setup tender',
     ],
@@ -158,19 +175,27 @@ function getSearchQueries(category: string): string[] {
       'UAE printing company signboard required',
       'Dubai shop signage approval company looking',
       'Abu Dhabi corporate uniform supplier needed',
-      'Saudi Arabia advertising agency project tender',
+      'Sharjah advertising agency project contact',
       'UAE vehicle branding and wrap service hiring',
     ],
   }
 
-  return queries[category] || [
-    `${category} project hiring UAE 2025`,
-    `Dubai ${category} company looking for services`,
-    `UAE ${category} tender quotation request`,
-  ]
+  if (queries[category]) return queries[category]
+
+  return getMarketScope(category) === 'uae'
+    ? [
+        `${category} project hiring UAE 2025`,
+        `Dubai ${category} company looking for services`,
+        `UAE ${category} tender quotation request`,
+      ]
+    : [
+        `${category} project hiring 2025`,
+        `${category} company looking for services worldwide`,
+        `${category} tender quotation request`,
+      ]
 }
 
-function getContactDiscoveryQueries(category: string): string[] {
+function getContactDiscoveryQueries(category: string, scope: MarketScope): string[] {
   const terms: Record<string, string[]> = {
     INTERIOR_DESIGN: ['interior design studio', 'villa interior designer'],
     VISUALIZATION_3D: ['3D rendering studio', 'architectural visualization company'],
@@ -193,13 +218,26 @@ function getContactDiscoveryQueries(category: string): string[] {
     category.toLowerCase().replace(/_/g, ' '),
   ]
 
+  if (scope === 'global') {
+    return Array.from(
+      new Set([
+        `${primary} contact email`,
+        `${primary} company contact us email`,
+        `United States ${primary} contact email`,
+        `United Kingdom ${secondary} contact email`,
+        `Singapore ${primary} company email`,
+        `UAE ${primary} contact email`,
+      ]),
+    )
+  }
+
   return Array.from(
     new Set([
       `Dubai ${primary} contact email`,
       `UAE ${primary} contact us email`,
       `site:.ae "${primary}" "email"`,
-      `Saudi Arabia ${secondary} contact email`,
-      `Qatar ${primary} company email`,
+      `Abu Dhabi ${secondary} contact email`,
+      `Sharjah ${primary} company email`,
     ]),
   )
 }
@@ -207,9 +245,23 @@ function getContactDiscoveryQueries(category: string): string[] {
 // ---------------------------------------------------------------------------
 // LLM system prompt for lead extraction
 // ---------------------------------------------------------------------------
-function buildSystemPrompt(category: string): string {
+function buildSystemPrompt(category: string, scope: MarketScope): string {
+  const targetMarket =
+    scope === 'uae'
+      ? `Target market:
+- Focus on UAE local leads only: Dubai, Abu Dhabi, Sharjah, Ajman, Ras Al Khaimah, Fujairah, Umm Al Quwain, Al Ain, and UAE free zones
+- Set country to "AE" for every accepted lead
+- Set region to "GCC"
+- Do not return Saudi Arabia, Qatar, Kuwait, Bahrain, Oman, UK, India, Singapore, or worldwide leads unless the source clearly shows a UAE office/contact and the lead is for the UAE market`
+      : `Target market:
+- Worldwide leads are allowed for this category, especially design and digital work
+- Use the real country and region shown by the source page
+- Do not force the country to UAE unless the source clearly shows a UAE office/contact or UAE project`
+
   return `You are a lead generation AI for AB Kreative, a UAE-based lead generation company.
 Extract business leads from the provided web search results. Return ONLY valid JSON in the exact shape requested by the user message — no markdown, no explanation.
+
+${targetMarket}
 
 Each lead object MUST have these fields:
 - title: string (short project title)
@@ -240,7 +292,7 @@ Rules:
 - Skip any lead that does not include both a traceable sourceUrl and a real contact email visible in the results
 - If an active project/tender is not visible, a verified prospect company/contact page is valid. In that case, describe the lead as a prospect opportunity without inventing a requested project.
 - If no genuine leads can be extracted from the results, return an empty result in the requested JSON shape
-- Set "AE" as the default country and "GCC" as the default region if location is unclear
+- For UAE-only categories, set "AE" as the country and "GCC" as the region. For worldwide categories, set the real country and region from the source.
 - Return valid JSON only — no backticks, no markdown code fences`
 }
 
@@ -282,16 +334,27 @@ function getLeadResponseSchema() {
   }
 }
 
-function buildGeminiPrompt(category: string, query: string, requestedCount: number): string {
-  return `${buildSystemPrompt(category)}
+function buildGeminiPrompt(
+  category: string,
+  query: string,
+  requestedCount: number,
+  scope: MarketScope,
+): string {
+  const marketLabel = scope === 'uae' ? 'UAE' : 'worldwide'
+  const marketInstruction =
+    scope === 'uae'
+      ? 'Prefer active RFQs, tenders, hiring notices, or service requests in Dubai, Abu Dhabi, Sharjah, or another UAE emirate. If those are not visible, return verified UAE prospect companies whose public contact/about page shows a real email and whose business context matches this category.'
+      : 'Prefer active RFQs, tenders, hiring notices, or service requests from any country. If those are not visible, return verified worldwide prospect companies whose public contact/about page shows a real email and whose business context matches this category.'
 
-Use Google Search to find current public business leads for this query:
+  return `${buildSystemPrompt(category, scope)}
+
+Use Google Search to find current ${marketLabel} public business leads for this query:
 "${query}"
 
 Return a JSON object with exactly this shape:
 {"leads":[ ...lead objects... ]}
 
-Find at most ${requestedCount} leads for this query. Prefer active RFQs, tenders, hiring notices, or service requests. If those are not visible, return verified prospect companies whose public contact/about page shows a real email and whose business context matches this category. The sourceUrl must be the public page where the opportunity/contact evidence was found. The clientEmail must be visible on that exact source page. If you cannot find verified contact evidence, return {"leads":[]}.`
+Find at most ${requestedCount} ${marketLabel} leads for this query. ${marketInstruction} The sourceUrl must be the public page where the opportunity/contact evidence was found. The clientEmail must be visible on that exact source page. If you cannot find verified contact evidence for the target market, return {"leads":[]}.`
 }
 
 function asString(value: unknown): string {
@@ -305,6 +368,68 @@ function asNumber(value: unknown, fallback: number): number {
 
 function unique(items: string[]): string[] {
   return Array.from(new Set(items.filter(Boolean)))
+}
+
+const UAE_LOCATION_RE =
+  /\b(UAE|United Arab Emirates|Dubai|Abu Dhabi|Sharjah|Ajman|Ras Al Khaimah|RAK|Fujairah|Umm Al Quwain|Al Ain|Jebel Ali|Business Bay|Deira|JLT|DIFC|Dubai Marina|Al Quoz|Mussafah)\b/i
+
+const NON_UAE_LOCATION_RE =
+  /\b(Saudi Arabia|KSA|Riyadh|Jeddah|Qatar|Doha|Kuwait|Bahrain|Manama|Oman|Muscat|London|United Kingdom|UK|India|Mumbai|Delhi|Singapore|United States|USA)\b/i
+
+function hasUaeSignal(text: string): boolean {
+  if (UAE_LOCATION_RE.test(text)) return true
+
+  try {
+    return new URL(text).hostname.toLowerCase().endsWith('.ae')
+  } catch {
+    return false
+  }
+}
+
+function hasNonUaeSignal(text: string): boolean {
+  return NON_UAE_LOCATION_RE.test(text)
+}
+
+function normalizeCountry(value: unknown, context = ''): string {
+  const country = asString(value)
+  const text = `${country}\n${context}`
+  const aliases: Array<[RegExp, string]> = [
+    [/\b(UAE|United Arab Emirates|Dubai|Abu Dhabi|Sharjah|Ajman|Ras Al Khaimah|RAK|Fujairah|Umm Al Quwain|Al Ain)\b/i, 'AE'],
+    [/\b(Saudi Arabia|KSA|Riyadh|Jeddah)\b/i, 'SA'],
+    [/\b(Qatar|Doha)\b/i, 'QA'],
+    [/\b(Kuwait)\b/i, 'KW'],
+    [/\b(Bahrain|Manama)\b/i, 'BH'],
+    [/\b(Oman|Muscat)\b/i, 'OM'],
+    [/\b(United Kingdom|UK|London|England|Scotland|Wales)\b/i, 'GB'],
+    [/\b(United States|USA|US|New York|California|Texas|Florida)\b/i, 'US'],
+    [/\b(India|Mumbai|Delhi|Bangalore|Bengaluru)\b/i, 'IN'],
+    [/\b(Singapore)\b/i, 'SG'],
+    [/\b(Australia|Sydney|Melbourne)\b/i, 'AU'],
+    [/\b(Germany|Berlin)\b/i, 'DE'],
+    [/\b(France|Paris)\b/i, 'FR'],
+    [/\b(Netherlands|Amsterdam)\b/i, 'NL'],
+  ]
+
+  if (/^[A-Za-z]{2}$/.test(country)) return country.toUpperCase()
+
+  for (const [pattern, code] of aliases) {
+    if (pattern.test(text)) return code
+  }
+
+  return 'AE'
+}
+
+function normalizeRegion(country: string, value: unknown): string {
+  const region = asString(value)
+  if (region) return region
+
+  if (['AE', 'SA', 'QA', 'KW', 'BH', 'OM'].includes(country)) return 'GCC'
+  if (['GB', 'DE', 'FR', 'NL'].includes(country)) return 'Europe'
+  if (['US', 'CA'].includes(country)) return 'North America'
+  if (['SG', 'AU'].includes(country)) return 'Asia Pacific'
+  if (country === 'IN') return 'South Asia'
+
+  return 'GCC'
 }
 
 function parseLeadCandidates(content: string): LeadCandidate[] {
@@ -359,31 +484,6 @@ function buildSearchEvidence(searchResults: Array<Record<string, unknown>>): Map
   }
 
   return evidenceByUrl
-}
-
-function normalizeCountry(value: unknown): string {
-  const country = asString(value)
-  const aliases: Record<string, string> = {
-    UAE: 'AE',
-    'United Arab Emirates': 'AE',
-    Dubai: 'AE',
-    'Saudi Arabia': 'SA',
-    KSA: 'SA',
-    Qatar: 'QA',
-    Kuwait: 'KW',
-    Bahrain: 'BH',
-    Oman: 'OM',
-    'United Kingdom': 'GB',
-    UK: 'GB',
-    'United States': 'US',
-    USA: 'US',
-    India: 'IN',
-    Singapore: 'SG',
-    Australia: 'AU',
-  }
-
-  if (/^[A-Za-z]{2}$/.test(country)) return country.toUpperCase()
-  return aliases[country] || 'AE'
 }
 
 async function fetchEvidencePage(
@@ -452,11 +552,20 @@ function extractSameSiteContactLinks(html: string, baseUrl: string): string[] {
 async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
   const sourcePage = await fetchEvidencePage(sourceUrl, 5_000)
   if (!sourcePage) {
-    return { emails: [], phones: [], pageChecked: false, evidenceUrl: null }
+    return {
+      emails: [],
+      phones: [],
+      pageChecked: false,
+      evidenceUrl: null,
+      hasUaeSignal: hasUaeSignal(sourceUrl),
+      hasNonUaeSignal: hasNonUaeSignal(sourceUrl),
+    }
   }
 
   const sourceEmails = extractEmails(sourcePage.text)
   let phones = extractPhones(sourcePage.text)
+  let hasUae = hasUaeSignal(`${sourcePage.finalUrl}\n${sourcePage.text}`)
+  let hasNonUae = hasNonUaeSignal(`${sourcePage.finalUrl}\n${sourcePage.text}`)
 
   if (sourceEmails.length > 0) {
     return {
@@ -464,6 +573,8 @@ async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
       phones,
       pageChecked: true,
       evidenceUrl: sourcePage.finalUrl,
+      hasUaeSignal: hasUae,
+      hasNonUaeSignal: hasNonUae,
     }
   }
 
@@ -475,6 +586,8 @@ async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
     const contactEmails = extractEmails(contactPage.text)
     const contactPhones = extractPhones(contactPage.text)
     phones = unique([...phones, ...contactPhones])
+    hasUae = hasUae || hasUaeSignal(`${contactPage.finalUrl}\n${contactPage.text}`)
+    hasNonUae = hasNonUae || hasNonUaeSignal(`${contactPage.finalUrl}\n${contactPage.text}`)
 
     if (contactEmails.length > 0) {
       return {
@@ -482,11 +595,20 @@ async function getPageEvidence(sourceUrl: string): Promise<ContactEvidence> {
         phones,
         pageChecked: true,
         evidenceUrl: contactPage.finalUrl,
+        hasUaeSignal: hasUae,
+        hasNonUaeSignal: hasNonUae,
       }
     }
   }
 
-  return { emails: [], phones, pageChecked: true, evidenceUrl: sourcePage.finalUrl }
+  return {
+    emails: [],
+    phones,
+    pageChecked: true,
+    evidenceUrl: sourcePage.finalUrl,
+    hasUaeSignal: hasUae,
+    hasNonUaeSignal: hasNonUae,
+  }
 }
 
 function selectVerifiedEmail(candidateEmail: unknown, evidenceEmails: string[]): string | null {
@@ -515,21 +637,74 @@ function selectVerifiedPhone(candidatePhone: unknown, evidencePhones: string[]):
   return verifiedPhone || evidencePhones[0] || null
 }
 
+function normalizeUaeCity(value: unknown, context: string): string | null {
+  const text = `${asString(value)}\n${context}`
+  const cityPatterns: Array<[RegExp, string]> = [
+    [/\bDubai\b/i, 'Dubai'],
+    [/\bAbu Dhabi\b/i, 'Abu Dhabi'],
+    [/\bSharjah\b/i, 'Sharjah'],
+    [/\bAjman\b/i, 'Ajman'],
+    [/\bRas Al Khaimah\b|\bRAK\b/i, 'Ras Al Khaimah'],
+    [/\bFujairah\b/i, 'Fujairah'],
+    [/\bUmm Al Quwain\b/i, 'Umm Al Quwain'],
+    [/\bAl Ain\b/i, 'Al Ain'],
+  ]
+
+  for (const [pattern, city] of cityPatterns) {
+    if (pattern.test(text)) return city
+  }
+
+  const city = asString(value)
+  return city && !hasNonUaeSignal(city) ? city : null
+}
+
+function hasVerifiedUaeLocation(
+  rawLead: LeadCandidate,
+  sourceUrl: string,
+  evidence: ContactEvidence,
+): boolean {
+  const locationText = [
+    rawLead.title,
+    rawLead.description,
+    rawLead.country,
+    rawLead.city,
+    rawLead.region,
+    rawLead.clientCompany,
+    sourceUrl,
+    evidence.evidenceUrl,
+  ]
+    .map((value) => (typeof value === 'string' ? value : ''))
+    .join('\n')
+
+  return evidence.hasUaeSignal || hasUaeSignal(locationText)
+}
+
 function buildVerifiedLead(
   rawLead: LeadCandidate,
   category: string,
   sourceUrl: string,
   clientEmail: string,
   clientPhone: string | null,
+  scope: MarketScope,
 ): LeadCandidate | null {
   const title = asString(rawLead.title)
   const description = asString(rawLead.description)
   const skills = asString(rawLead.skills)
+  const locationContext = [
+    title,
+    description,
+    sourceUrl,
+    rawLead.clientCompany,
+    rawLead.sourceUrl,
+  ]
+    .map((value) => (typeof value === 'string' ? value : ''))
+    .join('\n')
 
   if (!title || !description || !skills) return null
 
   const budgetMin = Math.max(0, Math.round(asNumber(rawLead.budgetMin, 0)))
   const budgetMax = Math.max(budgetMin, Math.round(asNumber(rawLead.budgetMax, budgetMin)))
+  const country = scope === 'uae' ? 'AE' : normalizeCountry(rawLead.country, locationContext)
 
   return {
     ...rawLead,
@@ -537,9 +712,9 @@ function buildVerifiedLead(
     description,
     category,
     subcategory: asString(rawLead.subcategory) || null,
-    country: normalizeCountry(rawLead.country),
-    city: asString(rawLead.city) || null,
-    region: asString(rawLead.region) || 'GCC',
+    country,
+    city: scope === 'uae' ? normalizeUaeCity(rawLead.city, locationContext) : asString(rawLead.city) || null,
+    region: scope === 'uae' ? 'GCC' : normalizeRegion(country, rawLead.region),
     budgetMin,
     budgetMax,
     currency: 'USD',
@@ -558,6 +733,7 @@ async function verifyLeadCandidates(
   rawLeads: LeadCandidate[],
   category: string,
   searchEvidenceByUrl: Map<string, SearchEvidence>,
+  scope: MarketScope,
 ): Promise<{ leads: LeadCandidate[]; rejected: number; pagesChecked: number }> {
   const verifiedLeads: LeadCandidate[] = []
   let rejected = 0
@@ -584,12 +760,18 @@ async function verifyLeadCandidates(
     }
 
     const verifiedSourceUrl = pageEvidence.evidenceUrl || sourceUrl
+    if (scope === 'uae' && !hasVerifiedUaeLocation(rawLead, verifiedSourceUrl, pageEvidence)) {
+      rejected++
+      continue
+    }
+
     const verifiedLead = buildVerifiedLead(
       rawLead,
       category,
       verifiedSourceUrl,
       clientEmail,
       selectVerifiedPhone(rawLead.clientPhone, evidencePhones),
+      scope,
     )
 
     if (verifiedLead) {
@@ -691,17 +873,18 @@ async function generateWithGemini(
   const queriesTried: string[] = []
   let rejectedCandidates = 0
   let pagesChecked = 0
-  const queryPlan = unique([...getContactDiscoveryQueries(category), ...searchQueries]).slice(0, 8)
+  const scope = getMarketScope(category)
+  const queryPlan = unique([...getContactDiscoveryQueries(category, scope), ...searchQueries]).slice(0, 8)
 
   for (const query of queryPlan) {
     if (allLeads.length >= requestedCount) break
     queriesTried.push(query)
 
     const outputText = await callGeminiInteraction(
-      buildGeminiPrompt(category, query, requestedCount - allLeads.length),
+      buildGeminiPrompt(category, query, requestedCount - allLeads.length, scope),
     )
     const parsedLeads = parseLeadCandidates(outputText)
-    const verified = await verifyLeadCandidates(parsedLeads, category, new Map())
+    const verified = await verifyLeadCandidates(parsedLeads, category, new Map(), scope)
 
     allLeads.push(...verified.leads)
     rejectedCandidates += verified.rejected
@@ -727,6 +910,7 @@ async function generateWithZai(
   const queriesTried: string[] = []
   let rejectedCandidates = 0
   let pagesChecked = 0
+  const scope = getMarketScope(category)
 
   for (const query of searchQueries) {
     if (allLeads.length >= requestedCount) break
@@ -758,7 +942,7 @@ async function generateWithZai(
       messages: [
         {
           role: 'system',
-          content: buildSystemPrompt(category),
+          content: buildSystemPrompt(category, scope),
         },
         {
           role: 'user',
@@ -770,7 +954,7 @@ async function generateWithZai(
 
     const content = llmResponse.choices?.[0]?.message?.content || '[]'
     const parsedLeads = parseLeadCandidates(content)
-    const verified = await verifyLeadCandidates(parsedLeads, category, searchEvidenceByUrl)
+    const verified = await verifyLeadCandidates(parsedLeads, category, searchEvidenceByUrl, scope)
     allLeads.push(...verified.leads)
     rejectedCandidates += verified.rejected
     pagesChecked += verified.pagesChecked

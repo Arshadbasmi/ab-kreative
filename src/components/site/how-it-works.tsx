@@ -17,7 +17,7 @@ const STEPS = [
     icon: Search,
     title: 'Browse leads',
     description:
-      'Filter through active leads across five verticals and 10+ regions by category, country, budget, and timeline. Every lead is verified and includes full project brief and client information.',
+      'Filter through worldwide design leads or UAE-only service leads by category, country, budget, and timeline. Every lead is verified and includes full project brief and client information.',
   },
   {
     icon: Send,
@@ -29,7 +29,7 @@ const STEPS = [
     icon: CheckCircle2,
     title: 'Close the deal',
     description:
-      'Engage clients on your terms with real budgets and real timelines. Build your pipeline and grow your business across international markets.',
+      'Engage clients on your terms with real budgets and real timelines. Build your design pipeline globally and service pipeline locally in the UAE.',
   },
 ]
 
@@ -92,7 +92,7 @@ export function HowItWorks() {
           </h2>
           <p className="mt-3 text-sm text-muted-foreground sm:text-base">
             AB Kreative connects service providers with income-generating leads
-            across five verticals and 10+ regions. Direct connections, real budgets.
+            across worldwide design markets and UAE service verticals. Direct connections, real budgets.
           </p>
         </div>
 

@@ -1,17 +1,18 @@
 'use client'
 
 import { Linkedin, Twitter } from 'lucide-react'
-import { CATEGORIES, COUNTRIES } from '@/lib/constants'
+import { CATEGORIES } from '@/lib/constants'
 
 const KEY_REGIONS = [
-  { name: 'UAE', flag: '🇦🇪' },
-  { name: 'Saudi Arabia', flag: '🇸🇦' },
-  { name: 'Qatar', flag: '🇶🇦' },
-  { name: 'United Kingdom', flag: '🇬🇧' },
-  { name: 'United States', flag: '🇺🇸' },
-  { name: 'Singapore', flag: '🇸🇬' },
-  { name: 'India', flag: '🇮🇳' },
-  { name: 'Australia', flag: '🇦🇺' },
+  { name: 'Design Worldwide', flag: '🌐' },
+  { name: 'Dubai', flag: '🇦🇪' },
+  { name: 'Abu Dhabi', flag: '🇦🇪' },
+  { name: 'Sharjah', flag: '🇦🇪' },
+  { name: 'Fitout UAE', flag: '🇦🇪' },
+  { name: 'Advertising UAE', flag: '🇦🇪' },
+  { name: 'Credit Card UAE', flag: '🇦🇪' },
+  { name: 'Logistics UAE', flag: '🇦🇪' },
+  { name: 'UAE Free Zones', flag: '🇦🇪' },
 ]
 
 export function Footer() {
@@ -43,9 +44,9 @@ export function Footer() {
               </div>
             </div>
             <p className="mt-4 max-w-md text-sm text-muted-foreground">
-              Income-generating leads across five verticals — design, fitout,
-              finance, logistics, and UAE government approvals. Worldwide coverage,
-              direct connections, real budgets.
+              Income-generating leads across key verticals: design worldwide,
+              plus UAE-focused fitout, advertising, credit card, logistics,
+              and approvals. Direct connections, real budgets.
             </p>
             <div className="mt-4 flex items-center gap-2">
               <a
@@ -90,7 +91,7 @@ export function Footer() {
               className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               style={{ fontFamily: 'var(--font-space-grotesk)' }}
             >
-              Regions
+              Market Focus
             </h4>
             <ul className="mt-3 space-y-1.5 text-sm">
               {KEY_REGIONS.map((r) => (
