@@ -32,6 +32,8 @@ type GenerationResult = {
   rejectedCandidates: number
   pagesChecked: number
   provider: 'gemini' | 'zai'
+  quotaExhausted?: boolean
+  warning?: string
 }
 
 type MarketScope = 'global' | 'uae'
@@ -952,9 +954,27 @@ async function generateWithGemini(
     if (allLeads.length >= requestedCount) break
     queriesTried.push(query)
 
-    const outputText = await callGeminiInteraction(
-      buildGeminiPrompt(category, query, requestedCount - allLeads.length, scope),
-    )
+    let outputText = ''
+    try {
+      outputText = await callGeminiInteraction(
+        buildGeminiPrompt(category, query, requestedCount - allLeads.length, scope),
+      )
+    } catch (error) {
+      if (isAiQuotaError(error) && allLeads.length > 0) {
+        return {
+          leads: allLeads,
+          queriesTried,
+          rejectedCandidates,
+          pagesChecked,
+          provider: 'gemini',
+          quotaExhausted: true,
+          warning: 'Gemini quota was reached after saving the verified leads already found.',
+        }
+      }
+
+      throw error
+    }
+
     const parsedLeads = parseLeadCandidates(outputText)
     const verified = await verifyLeadCandidates(parsedLeads, category, new Map(), scope)
 
@@ -1073,7 +1093,28 @@ export async function POST(request: NextRequest) {
   try {
     let generation: GenerationResult
     if (process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY) {
-      generation = await generateWithGemini(category, requestedCount, searchQueries, requestedMaxQueries)
+      try {
+        generation = await generateWithGemini(category, requestedCount, searchQueries, requestedMaxQueries)
+      } catch (error) {
+        if (!isAiQuotaError(error)) throw error
+
+        try {
+          generation = await generateWithZai(
+            category,
+            Math.min(requestedCount, 3),
+            searchQueries,
+            Math.min(requestedMaxQueries, 2),
+          )
+        } catch {
+          throw error
+        }
+
+        generation.warning =
+          generation.leads.length > 0
+            ? 'Gemini quota was exhausted, so the app used the free fallback provider for this batch.'
+            : 'Gemini quota is exhausted and the fallback provider did not find verified leads.'
+        generation.quotaExhausted = true
+      }
     } else {
       generation = await generateWithZai(category, requestedCount, searchQueries, requestedMaxQueries)
     }
@@ -1098,11 +1139,25 @@ export async function POST(request: NextRequest) {
       id: `ai_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
     }))
 
+    if (generation.quotaExhausted && leads.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            'Free AI quota is exhausted for now. Work the saved leads, then try a smaller category batch after quota resets.',
+          code: 'AI_QUOTA_EXHAUSTED',
+          details: generation.warning,
+        },
+        { status: 429 },
+      )
+    }
+
     return NextResponse.json({
       leads,
       count: leads.length,
       category,
       provider: generation.provider,
+      warning: generation.warning,
+      code: generation.quotaExhausted && leads.length === 0 ? 'AI_QUOTA_EXHAUSTED' : undefined,
       queriesUsed: generation.queriesTried,
       quality: {
         accepted: leads.length,

@@ -86,21 +86,10 @@ const CATEGORY_ICONS: Record<string, typeof LayoutGrid> = {
 }
 
 const DAILY_MAX_GENERATION_PLAN = [
-  { category: 'DESIGN_SERVICES', count: 10 },
-  { category: 'TECHNICAL_DESIGN', count: 10 },
-  { category: 'VISUALIZATION_3D', count: 10 },
-  { category: 'SOFTWARE_DEV', count: 8 },
-  { category: 'INTERIOR_DESIGN', count: 8 },
-  { category: 'FITOUT', count: 7 },
-  { category: 'ADVERTISING', count: 5 },
-  { category: 'BUSINESS_SETUP', count: 4 },
-  { category: 'UAE_APPROVALS', count: 4 },
-  { category: 'LOGISTICS', count: 4 },
-  { category: 'FINANCE', count: 4 },
-  { category: 'VIRAL_PRODUCTS', count: 4 },
-  { category: 'INVESTMENT', count: 3 },
-  { category: 'REAL_ESTATE', count: 3 },
-  { category: 'INVESTORS', count: 3 },
+  { category: 'DESIGN_SERVICES', count: 3 },
+  { category: 'TECHNICAL_DESIGN', count: 2 },
+  { category: 'VISUALIZATION_3D', count: 2 },
+  { category: 'FITOUT', count: 2 },
 ]
 
 type GeneratedPitchLead = Pick<
@@ -370,7 +359,7 @@ export function BrowseLeadsView() {
               const generationPlan =
                 category === 'ALL'
                   ? DAILY_MAX_GENERATION_PLAN
-                  : [{ category, count: 10 }]
+                  : [{ category, count: 3 }]
 
               let savedCount = 0
               let failedCount = 0
@@ -383,6 +372,7 @@ export function BrowseLeadsView() {
               const failedCategories: string[] = []
               let quotaExhausted = false
               let quotaMessage = ''
+              const generationWarnings: string[] = []
 
               for (const item of generationPlan) {
                 setGeneratingLabel(getCategoryMeta(item.category).short)
@@ -391,7 +381,7 @@ export function BrowseLeadsView() {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     ...item,
-                    maxQueries: category === 'ALL' ? 2 : 4,
+                    maxQueries: category === 'ALL' ? 1 : 2,
                   }),
                 })
                 const json = await res.json()
@@ -407,6 +397,7 @@ export function BrowseLeadsView() {
                   continue
                 }
 
+                if (json.warning) generationWarnings.push(json.warning)
                 generatedCount += json.leads?.length || 0
                 rejectedCount += json.quality?.rejected || 0
 
@@ -443,14 +434,17 @@ export function BrowseLeadsView() {
                 const autoPitchSummary = autoPitchEnabled
                   ? ` Auto pitch: ${autoSentCount} sent${autoSkippedCount ? `, ${autoSkippedCount} skipped` : ''}${autoFailedCount ? `, ${autoFailedCount} failed` : ''}${autoPitchMessage ? ` (${autoPitchMessage})` : ''}.`
                   : ''
+                const warningSummary =
+                  generationWarnings.length > 0 ? ` ${generationWarnings[0]}` : ''
                 toast({
                   title: `${savedCount} verified lead${savedCount === 1 ? '' : 's'} saved`,
                   description:
                     (category === 'ALL'
-                      ? `Daily max ran all categories, design first. Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`
+                      ? `Free safe batch ran design and fitout priority categories. Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`
                       : failedCount > 0
                         ? `${failedCount} generated lead${failedCount === 1 ? '' : 's'} could not be saved.`
                         : `Rejected ${rejectedCount} unverified result${rejectedCount === 1 ? '' : 's'}.`) +
+                    warningSummary +
                     autoPitchSummary,
                 })
               } else if (generatedCount > 0) {
@@ -462,7 +456,7 @@ export function BrowseLeadsView() {
                 })
               } else {
                 toast({
-                  title: quotaExhausted ? 'AI quota exhausted' : 'No verified leads found',
+                  title: quotaExhausted ? 'Free AI limit reached' : 'No verified leads found',
                   description:
                     quotaExhausted
                       ? quotaMessage
@@ -492,8 +486,8 @@ export function BrowseLeadsView() {
               ? `Generating ${generatingLabel}...`
               : 'Generating...'
             : category === 'ALL'
-              ? 'Daily Max Verified'
-              : 'Generate 10 Verified'}
+              ? 'Free Safe Verified'
+              : 'Generate 3 Verified'}
         </Button>
       </div>
 
