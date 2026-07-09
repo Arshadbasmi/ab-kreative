@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import useSWR from 'swr'
 import {
   Dialog,
@@ -36,6 +36,8 @@ import {
   Send,
   FileText,
   ImageIcon,
+  MessageCircle,
+  CheckCircle2,
 } from 'lucide-react'
 import {
   type Lead,
@@ -48,6 +50,7 @@ import {
 } from '@/lib/constants'
 import { EmailPitchDialog } from './email-pitch-dialog'
 import { downloadLead } from '@/lib/download-lead'
+import { isLeadPitchSent, subscribePitchSent } from '@/lib/pitch-status'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -76,6 +79,20 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
 
 function getCatColorClass(category: string) {
   return CATEGORY_COLORS[category] || CATEGORY_COLORS.DESIGN
+}
+
+function getDisplayClientName(name: string): string {
+  const cleaned = name.trim()
+  return /^not specified$/i.test(cleaned) ? 'Contact not listed' : cleaned
+}
+
+function getWhatsAppLink(phone: string | null): string | null {
+  if (!phone) return null
+
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 8) return null
+
+  return `https://wa.me/${digits}`
 }
 
 export function LeadDetailDialog({
@@ -119,6 +136,11 @@ export function LeadDetailDialog({
   const lead = data?.lead
   const cat = lead ? getCategoryMeta(lead.category) : null
   const catColor = lead ? getCatColorClass(lead.category) : null
+  const pitchSent = useSyncExternalStore(
+    subscribePitchSent,
+    () => (lead?.id ? isLeadPitchSent(lead.id) : false),
+    () => false,
+  )
 
   const copyToClipboard = (text: string | null | undefined, field: string) => {
     if (!text) return
@@ -142,7 +164,7 @@ export function LeadDetailDialog({
         window.open(result.email.mailtoLink, '_blank')
         toast({
           title: 'Opening email client',
-          description: `Composing email to ${lead.clientName} at ${lead.clientEmail}`,
+          description: `Composing email to ${getDisplayClientName(lead.clientName)} at ${lead.clientEmail}`,
         })
       }
     } catch {
@@ -215,6 +237,15 @@ export function LeadDetailDialog({
                   >
                     <Star className="h-3 w-3 fill-current" />
                     Featured
+                  </Badge>
+                )}
+                {pitchSent && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-green-500/30 bg-green-500/10 font-medium text-green-400"
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    Sent
                   </Badge>
                 )}
                 <span className="ml-auto text-xs text-muted-foreground">
@@ -362,11 +393,11 @@ export function LeadDetailDialog({
                   </h4>
                   <div className="mt-3 flex items-center gap-2.5">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#D9FA54]/10 text-sm font-semibold text-[#D9FA54]">
-                      {lead.clientName.charAt(0)}
+                      {getDisplayClientName(lead.clientName).charAt(0)}
                     </div>
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-foreground">
-                        {lead.clientName}
+                        {getDisplayClientName(lead.clientName)}
                       </div>
                       {lead.clientCompany && (
                         <div className="truncate text-xs text-muted-foreground">
@@ -404,7 +435,20 @@ export function LeadDetailDialog({
                         {copiedField === 'Phone' ? (
                           <Check className="h-3.5 w-3.5 shrink-0 text-[#D9FA54]" />
                         ) : (
-                          <Copy className="h-3.5 w-3.5 shrink-0 cursor-pointer text-muted-foreground/40 hover:text-muted-foreground" onClick={() => copyToClipboard(lead.clientPhone, 'Phone')} />
+                          <>
+                            {getWhatsAppLink(lead.clientPhone) && (
+                              <a
+                                href={getWhatsAppLink(lead.clientPhone) || undefined}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-green-400 transition-colors hover:text-green-300"
+                                aria-label="Open WhatsApp"
+                              >
+                                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                              </a>
+                            )}
+                            <Copy className="h-3.5 w-3.5 shrink-0 cursor-pointer text-muted-foreground/40 hover:text-muted-foreground" onClick={() => copyToClipboard(lead.clientPhone, 'Phone')} />
+                          </>
                         )}
                       </div>
                     )}
@@ -503,8 +547,23 @@ export function LeadDetailDialog({
                     onClick={() => setPitchOpen(true)}
                     className="border-[#D9FA54]/30 text-[#D9FA54] hover:bg-[#D9FA54]/10"
                   >
-                    <Send className="mr-1.5 h-3.5 w-3.5" />
-                    Send Pitch
+                    {pitchSent ? (
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    ) : (
+                      <Send className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {pitchSent ? 'Sent' : 'Send Pitch'}
+                  </Button>
+                )}
+                {getWhatsAppLink(lead.clientPhone) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(getWhatsAppLink(lead.clientPhone) || undefined, '_blank')}
+                    className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                  >
+                    <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+                    WhatsApp
                   </Button>
                 )}
               </div>

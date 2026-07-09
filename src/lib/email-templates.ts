@@ -21,13 +21,18 @@ export type PitchContext = {
   senderName?: string | null
 }
 
+function getCleanClientName(name: string): string {
+  const cleaned = name.trim()
+  return /^not specified$/i.test(cleaned) ? "" : cleaned
+}
+
 // ─── Templates ───────────────────────────────────────────────────────────────
 
 export const EMAIL_TEMPLATES: Record<string, EmailTemplate> = {
   // ── 1. DESIGN ────────────────────────────────────────────────────────────
   DESIGN: {
     subject: "{{clientName}} — Bringing Your Vision for {{projectTitle}} to Life",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 I came across your project "{{projectTitle}}" and wanted to reach out. At AB Kreative, we specialize in turning ambitious design concepts into striking realities across the UAE.
 
@@ -42,7 +47,7 @@ Best regards,
   // ── 2. FITOUT ────────────────────────────────────────────────────────────
   FITOUT: {
     subject: "{{clientName}} — Expert Fitout Solutions for {{projectTitle}}",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 I noticed your project "{{projectTitle}}" and wanted to introduce AB Kreative as a partner who can deliver it end to end.
 
@@ -50,14 +55,15 @@ We handle full-scale interior fitouts, construction, renovation, and MEP works a
 
 I'd appreciate the chance to discuss your requirements in more detail. Could we schedule a brief call to explore how we can support you?
 
-Best regards,
-{{senderName}} | AB Kreative | www.abkreative.com`,
+Best Regards,
+Ab Kreative Design & Fitout
+www.abkreative.com`,
   },
 
   // ── 3. FINANCE ───────────────────────────────────────────────────────────
   FINANCE: {
     subject: "{{clientName}} — UAE Credit Card & Loan Options for {{projectTitle}}",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 I saw your interest in "{{projectTitle}}" and wanted to connect. AB Kreative helps UAE residents and businesses find suitable credit card and loan options through trusted banking partners.
 
@@ -71,7 +77,7 @@ Best regards,
 
   CREDIT_CARD: {
     subject: "{{clientName}} — UAE Credit Card & Loan Options for {{projectTitle}}",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 I saw your interest in "{{projectTitle}}" and wanted to connect. AB Kreative helps UAE residents and businesses find suitable credit card and loan options through trusted banking partners.
 
@@ -86,7 +92,7 @@ Best regards,
   // ── 4. LOGISTICS ─────────────────────────────────────────────────────────
   LOGISTICS: {
     subject: "{{clientName}} — Reliable Logistics for {{projectTitle}}",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 Your project "{{projectTitle}}" caught my attention, and I believe AB Kreative can add real value to your supply chain.
 
@@ -101,7 +107,7 @@ Best regards,
   // ── 5. UAE_APPROVALS ─────────────────────────────────────────────────────
   UAE_APPROVALS: {
     subject: "{{clientName}} — Navigating UAE Approvals for {{projectTitle}}",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 I came across your project "{{projectTitle}}" and wanted to reach out. Securing government approvals in the UAE can be complex — that's where AB Kreative steps in.
 
@@ -116,7 +122,7 @@ Best regards,
   // ── 6. DUBAI_BUSINESS_SETUP ──────────────────────────────────────────────
   DUBAI_BUSINESS_SETUP: {
     subject: "{{clientName}} — Launch Your Business in Dubai with AB Kreative",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 I noticed your interest in "{{projectTitle}}" and wanted to connect. Setting up a business in Dubai should be exciting — not exhausting — and AB Kreative makes sure it is.
 
@@ -131,7 +137,7 @@ Best regards,
   // ── 7. VIRAL_PRODUCTS / DROPSHIPPING ────────────────────────────────────
   VIRAL_PRODUCTS: {
     subject: "{{clientName}} — Dropshipping Product Sourcing for {{projectTitle}}",
-    body: `Hi {{clientName}},
+    body: `Hi {{greetingName}},
 
 I came across "{{projectTitle}}" and wanted to connect. AB Kreative is building ecommerce and dropshipping product pipelines for fast-moving UAE and international markets.
 
@@ -169,6 +175,9 @@ function resolvePlaceholders(text: string, ctx: PitchContext): string {
   const budget = formatBudget(ctx)
   const location = formatLocation(ctx)
   const senderName = ctx.senderName?.trim() || "Arshad"
+  const cleanClientName = getCleanClientName(ctx.clientName)
+  const subjectClientName = cleanClientName || ctx.clientCompany?.trim() || "Project"
+  const greetingName = cleanClientName || "there"
 
   // Build a dynamic subcategory mention (e.g. ", particularly in 3D visualization")
   const subcategoryClause =
@@ -177,7 +186,8 @@ function resolvePlaceholders(text: string, ctx: PitchContext): string {
       : ""
 
   return text
-    .replace(/\{\{clientName\}\}/g, ctx.clientName)
+    .replace(/\{\{clientName\}\}/g, subjectClientName)
+    .replace(/\{\{greetingName\}\}/g, greetingName)
     .replace(/\{\{companyName\}\}/g, ctx.clientCompany ?? "")
     .replace(/\{\{projectTitle\}\}/g, ctx.title)
     .replace(/\{\{subcategory\}\}/g, subcategoryClause)
@@ -191,11 +201,14 @@ function resolvePlaceholders(text: string, ctx: PitchContext): string {
 export function getPitchTemplate(category: string, lead: PitchContext): EmailTemplate {
   const template = EMAIL_TEMPLATES[category]
   const senderName = lead.senderName?.trim() || "Arshad"
+  const cleanClientName = getCleanClientName(lead.clientName)
+  const subjectClientName = cleanClientName || lead.clientCompany?.trim() || "Project"
+  const greetingName = cleanClientName || "there"
 
   if (!template) {
     return {
-      subject: `${lead.clientName} — Let's Discuss Your Project`,
-      body: `Hi ${lead.clientName},
+      subject: `${subjectClientName} — Let's Discuss Your Project`,
+      body: `Hi ${greetingName},
 
 Thank you for your interest in "${lead.title}"${lead.clientCompany ? ` at ${lead.clientCompany}` : ""}. At AB Kreative, we'd love to learn more about how we can help.
 

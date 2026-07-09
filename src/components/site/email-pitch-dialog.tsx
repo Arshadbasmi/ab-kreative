@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import { type Lead } from '@/lib/constants'
 import { getPitchTemplate, type EmailTemplate } from '@/lib/email-templates'
+import { markLeadPitchSent } from '@/lib/pitch-status'
 import {
   DEFAULT_EMAIL_ROUTES,
   EMAIL_PROVIDER_PRESETS,
@@ -112,6 +113,11 @@ function saveEmailConfig(config: EmailRouteConfig) {
   localStorage.setItem(EMAIL_ROUTE_SETTINGS_STORAGE_KEY, JSON.stringify(settings))
 }
 
+function getDisplayClientName(name: string): string {
+  const cleaned = name.trim()
+  return /^not specified$/i.test(cleaned) ? 'Contact not listed' : cleaned
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -120,10 +126,12 @@ export function EmailPitchDialog({
   lead,
   open,
   onClose,
+  onSent,
 }: {
   lead: Lead
   open: boolean
   onClose: () => void
+  onSent?: (leadId: string) => void
 }) {
   const { toast } = useToast()
 
@@ -221,6 +229,8 @@ export function EmailPitchDialog({
 
       if (result.success) {
         setSent(true)
+        markLeadPitchSent(lead.id)
+        onSent?.(lead.id)
         toast({
           title: 'Email sent!',
           description: `Sent from ${result.from || emailConfig.email} to ${lead.clientEmail}`,
@@ -261,7 +271,7 @@ export function EmailPitchDialog({
                 Send Pitch Email
               </DialogTitle>
               <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
-                from {emailConfig.email} to {lead.clientName} &lt;{lead.clientEmail}&gt;
+                from {emailConfig.email} to {getDisplayClientName(lead.clientName)} &lt;{lead.clientEmail}&gt;
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2">

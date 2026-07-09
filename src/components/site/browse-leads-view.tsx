@@ -49,6 +49,7 @@ import {
   type Lead,
 } from '@/lib/constants'
 import { getPitchTemplate } from '@/lib/email-templates'
+import { markLeadPitchSent } from '@/lib/pitch-status'
 import {
   DEFAULT_EMAIL_ROUTES,
   EMAIL_ROUTES_STORAGE_KEY,
@@ -97,6 +98,7 @@ const DAILY_MAX_GENERATION_PLAN = [
 type GeneratedPitchLead = Pick<
   Lead,
   | 'category'
+  | 'id'
   | 'clientName'
   | 'clientCompany'
   | 'clientEmail'
@@ -454,6 +456,7 @@ export function BrowseLeadsView() {
                       const pitchResult = await sendFirstPitch(lead as GeneratedPitchLead)
                       if (pitchResult.status === 'sent') {
                         autoSentCount++
+                        markLeadPitchSent((lead as GeneratedPitchLead).id)
                       } else if (pitchResult.status === 'skipped') {
                         autoSkippedCount++
                         autoPitchMessage ||= pitchResult.error

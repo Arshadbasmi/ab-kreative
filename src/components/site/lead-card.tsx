@@ -1,6 +1,7 @@
 'use client'
 
-import { Flame, MapPin, Clock, DollarSign, Eye, Star, Briefcase, ArrowUpRight, Download, FileText, ImageIcon } from 'lucide-react'
+import { useSyncExternalStore } from 'react'
+import { Flame, MapPin, Clock, DollarSign, Eye, Star, Briefcase, ArrowUpRight, Download, FileText, ImageIcon, CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import {
@@ -18,6 +19,7 @@ import {
   getCountryName,
 } from '@/lib/constants'
 import { downloadLead } from '@/lib/download-lead'
+import { isLeadPitchSent, subscribePitchSent } from '@/lib/pitch-status'
 import { useToast } from '@/hooks/use-toast'
 import { motion } from 'framer-motion'
 
@@ -62,6 +64,11 @@ export function LeadCard({
   const skills = lead.skills.split(',').slice(0, 4)
   const extraSkills = lead.skills.split(',').length - 4
   const { toast } = useToast()
+  const pitchSent = useSyncExternalStore(
+    subscribePitchSent,
+    () => isLeadPitchSent(lead.id),
+    () => false,
+  )
 
   const handleDownload = async (format: 'pdf' | 'jpeg') => {
     toast({ title: `Generating ${format.toUpperCase()}...` })
@@ -99,6 +106,15 @@ export function LeadCard({
               >
                 <Flame className="h-3 w-3" />
                 Urgent
+              </Badge>
+            )}
+            {pitchSent && (
+              <Badge
+                variant="outline"
+                className="gap-1 border-green-500/30 bg-green-500/10 font-medium text-green-400"
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Sent
               </Badge>
             )}
             {lead.featured && (
