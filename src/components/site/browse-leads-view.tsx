@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import useSWR from 'swr'
 import {
   Search,
@@ -62,6 +62,8 @@ import {
 import { motion } from 'framer-motion'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const AI_QUOTA_PAUSE_KEY = 'abkreative_ai_quota_pause_until_v1'
+const AI_QUOTA_PAUSE_MS = 6 * 60 * 60 * 1000
 
 const CATEGORY_ICONS: Record<string, typeof LayoutGrid> = {
   INTERIOR_DESIGN: Home,
@@ -140,6 +142,26 @@ function canSendAutoPitch(config: EmailRouteConfig | undefined) {
   return Boolean(config?.enabled && config.smtpHost && config.smtpUser && config.smtpPass)
 }
 
+function loadAiQuotaPauseUntil() {
+  if (typeof window === 'undefined') return 0
+
+  const value = Number(localStorage.getItem(AI_QUOTA_PAUSE_KEY))
+  return Number.isFinite(value) && value > Date.now() ? value : 0
+}
+
+function saveAiQuotaPause() {
+  const pauseUntil = Date.now() + AI_QUOTA_PAUSE_MS
+  localStorage.setItem(AI_QUOTA_PAUSE_KEY, String(pauseUntil))
+  return pauseUntil
+}
+
+function formatPauseTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 export function BrowseLeadsView() {
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('ALL')
@@ -155,6 +177,11 @@ export function BrowseLeadsView() {
   const [generating, setGenerating] = useState(false)
   const [generatingLabel, setGeneratingLabel] = useState('')
   const [autoPitchEnabled, setAutoPitchEnabled] = useState(false)
+  const [aiQuotaPauseUntil, setAiQuotaPauseUntil] = useState(0)
+
+  useEffect(() => {
+    setAiQuotaPauseUntil(loadAiQuotaPauseUntil())
+  }, [])
 
   const qs = useMemo(() => {
     const params = new URLSearchParams()
@@ -238,6 +265,7 @@ export function BrowseLeadsView() {
   }, [region])
 
   const activeSubcategories = category !== 'ALL' ? SUBCATEGORIES[category] || [] : []
+  const aiQuotaPaused = aiQuotaPauseUntil > Date.now()
 
   const sendFirstPitch = useCallback(async (lead: GeneratedPitchLead) => {
     if (!lead.clientEmail || !/\S+@\S+\.\S+/.test(lead.clientEmail)) {
@@ -354,6 +382,14 @@ export function BrowseLeadsView() {
           variant="outline"
           disabled={generating}
           onClick={async () => {
+            if (aiQuotaPaused) {
+              toast({
+                title: 'Free AI paused',
+                description: `Use the saved leads now. Try generating again after ${formatPauseTime(aiQuotaPauseUntil)}.`,
+              })
+              return
+            }
+
             setGenerating(true)
             try {
               const generationPlan =
@@ -389,7 +425,11 @@ export function BrowseLeadsView() {
                 if (!res.ok) {
                   if (json.code === 'AI_QUOTA_EXHAUSTED') {
                     quotaExhausted = true
-                    quotaMessage = json.error || 'Gemini quota is exhausted.'
+                    const pauseUntil = saveAiQuotaPause()
+                    setAiQuotaPauseUntil(pauseUntil)
+                    quotaMessage =
+                      json.error ||
+                      `Free AI is paused until about ${formatPauseTime(pauseUntil)}. Work saved leads first.`
                     break
                   }
 
@@ -485,6 +525,8 @@ export function BrowseLeadsView() {
             ? generatingLabel
               ? `Generating ${generatingLabel}...`
               : 'Generating...'
+            : aiQuotaPaused
+              ? 'Free AI paused'
             : category === 'ALL'
               ? 'Free Safe Verified'
               : 'Generate 3 Verified'}

@@ -1176,7 +1176,8 @@ export async function POST(request: NextRequest) {
     if (isAiQuotaError(error)) {
       return NextResponse.json(
         {
-          error: 'Gemini quota is exhausted. Wait for quota reset or add billing/credits/new Gemini API key.',
+          error:
+            'Free AI quota is exhausted for now. Work the saved leads first, then try again after the quota resets.',
           code: 'AI_QUOTA_EXHAUSTED',
           details: String(error),
         },
