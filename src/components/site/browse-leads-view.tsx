@@ -59,6 +59,7 @@ import {
   mergeRouteSettings,
   type EmailRoute,
   type EmailRouteConfig,
+  type EmailRouteId,
 } from '@/lib/email-routing'
 import { motion } from 'framer-motion'
 
@@ -157,6 +158,10 @@ function saveAiQuotaPause() {
   return pauseUntil
 }
 
+function clearAiQuotaPause() {
+  localStorage.removeItem(AI_QUOTA_PAUSE_KEY)
+}
+
 function formatPauseTime(timestamp: number) {
   return new Date(timestamp).toLocaleTimeString([], {
     hour: 'numeric',
@@ -180,9 +185,21 @@ export function BrowseLeadsView() {
   const [generatingLabel, setGeneratingLabel] = useState('')
   const [autoPitchEnabled, setAutoPitchEnabled] = useState(false)
   const [aiQuotaPauseUntil, setAiQuotaPauseUntil] = useState(0)
+  const [serverConfiguredRoutes, setServerConfiguredRoutes] = useState<EmailRouteId[]>([])
 
   useEffect(() => {
     setAiQuotaPauseUntil(loadAiQuotaPauseUntil())
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/email-config-health')
+      .then((response) => response.json())
+      .then((data) => {
+        if (Array.isArray(data.configuredRoutes)) {
+          setServerConfiguredRoutes(data.configuredRoutes)
+        }
+      })
+      .catch(() => setServerConfiguredRoutes([]))
   }, [])
 
   const qs = useMemo(() => {
@@ -275,7 +292,9 @@ export function BrowseLeadsView() {
     }
 
     const emailConfig = loadEmailConfigForLead(lead.category)
-    if (!canSendAutoPitch(emailConfig)) {
+    const hasBrowserSmtp = canSendAutoPitch(emailConfig)
+    const hasServerSmtp = serverConfiguredRoutes.includes(emailConfig.id)
+    if (!emailConfig.enabled || (!hasBrowserSmtp && !hasServerSmtp)) {
       return { status: 'skipped' as const, error: `${emailConfig.email} SMTP not configured` }
     }
 
@@ -321,7 +340,7 @@ export function BrowseLeadsView() {
     }
 
     return { status: 'sent' as const }
-  }, [])
+  }, [serverConfiguredRoutes])
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -534,6 +553,23 @@ export function BrowseLeadsView() {
               ? 'Free Safe Verified'
               : 'Generate 3 Verified'}
         </Button>
+        {aiQuotaPaused && (
+          <Button
+            variant="ghost"
+            className="h-11 gap-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              clearAiQuotaPause()
+              setAiQuotaPauseUntil(0)
+              toast({
+                title: 'AI pause cleared',
+                description: 'You can try a small verified batch again.',
+              })
+            }}
+          >
+            <RotateCcw className="h-4 w-4" />
+            Clear AI pause
+          </Button>
+        )}
       </div>
 
       {/* Category pills */}

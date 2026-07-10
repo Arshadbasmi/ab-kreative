@@ -140,6 +140,7 @@ export function EmailPitchDialog({
     loadEmailConfigForCategory(lead.category),
   )
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [serverConfiguredRoutes, setServerConfiguredRoutes] = useState<EmailRouteId[]>([])
 
   // Email content
   const [subject, setSubject] = useState('')
@@ -172,6 +173,19 @@ export function EmailPitchDialog({
     }
   }, [open, lead])
 
+  useEffect(() => {
+    if (!open) return
+
+    fetch('/api/email-config-health')
+      .then((response) => response.json())
+      .then((data) => {
+        if (Array.isArray(data.configuredRoutes)) {
+          setServerConfiguredRoutes(data.configuredRoutes)
+        }
+      })
+      .catch(() => setServerConfiguredRoutes([]))
+  }, [open])
+
   const handleSaveSettings = useCallback(() => {
     saveEmailConfig(emailConfig)
     setSettingsOpen(false)
@@ -194,11 +208,14 @@ export function EmailPitchDialog({
   }, [])
 
   const handleSend = async () => {
-    if (!emailConfig.enabled || !emailConfig.smtpUser || !emailConfig.smtpPass) {
+    const hasBrowserSmtp = Boolean(emailConfig.smtpUser && emailConfig.smtpPass)
+    const hasServerSmtp = serverConfiguredRoutes.includes(emailConfig.id)
+
+    if (!emailConfig.enabled || (!hasBrowserSmtp && !hasServerSmtp)) {
       setSettingsOpen(true)
       toast({
         title: 'Configure sender first',
-        description: `Add SMTP settings for ${emailConfig.email}.`,
+        description: `Add SMTP settings for ${emailConfig.email}, or configure server email variables in Vercel.`,
         variant: 'destructive',
       })
       return
@@ -259,7 +276,11 @@ export function EmailPitchDialog({
     window.open(link, '_blank')
   }
 
-  const isConfigured = !!(emailConfig.enabled && emailConfig.smtpUser && emailConfig.smtpPass)
+  const isConfigured = Boolean(
+    emailConfig.enabled &&
+      ((emailConfig.smtpUser && emailConfig.smtpPass) || serverConfiguredRoutes.includes(emailConfig.id)),
+  )
+  const isServerConfigured = serverConfiguredRoutes.includes(emailConfig.id)
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -283,7 +304,7 @@ export function EmailPitchDialog({
               ) : isConfigured ? (
                 <span className="flex items-center gap-1.5 rounded-full bg-[#D9FA54]/10 px-3 py-1 text-xs font-medium text-[#D9FA54]">
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  Email configured
+                  {isServerConfigured && !emailConfig.smtpPass ? 'Server configured' : 'Email configured'}
                 </span>
               ) : (
                 <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400">

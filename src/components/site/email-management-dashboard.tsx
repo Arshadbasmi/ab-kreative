@@ -80,6 +80,7 @@ export function EmailManagementDashboard() {
   const [configs, setConfigs] = useState<EmailRouteConfig[]>(() =>
     mergeRouteSettings(DEFAULT_EMAIL_ROUTES, {}),
   )
+  const [serverConfiguredRoutes, setServerConfiguredRoutes] = useState<EmailRouteId[]>([])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -90,9 +91,25 @@ export function EmailManagementDashboard() {
     return () => window.clearTimeout(timeout)
   }, [])
 
+  useEffect(() => {
+    fetch('/api/email-config-health')
+      .then((response) => response.json())
+      .then((data) => {
+        if (Array.isArray(data.configuredRoutes)) {
+          setServerConfiguredRoutes(data.configuredRoutes)
+        }
+      })
+      .catch(() => setServerConfiguredRoutes([]))
+  }, [])
+
   const configuredCount = useMemo(
-    () => configs.filter((config) => config.enabled && config.smtpUser && config.smtpPass).length,
-    [configs],
+    () =>
+      configs.filter(
+        (config) =>
+          config.enabled &&
+          ((config.smtpUser && config.smtpPass) || serverConfiguredRoutes.includes(config.id)),
+      ).length,
+    [configs, serverConfiguredRoutes],
   )
 
   const categoryCount = useMemo(
@@ -193,7 +210,8 @@ export function EmailManagementDashboard() {
 
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
           {configs.map((config) => {
-            const isReady = Boolean(config.enabled && config.smtpUser && config.smtpPass)
+            const isServerReady = serverConfiguredRoutes.includes(config.id)
+            const isReady = Boolean(config.enabled && ((config.smtpUser && config.smtpPass) || isServerReady))
 
             return (
               <div key={config.id} className="rounded-lg border border-border bg-[#111111] p-4">
@@ -209,7 +227,7 @@ export function EmailManagementDashboard() {
                       {isReady ? (
                         <Badge className="border-green-500/30 bg-green-500/10 text-green-400">
                           <CheckCircle2 className="h-3 w-3" />
-                          Ready
+                          {isServerReady && !config.smtpPass ? 'Server Ready' : 'Ready'}
                         </Badge>
                       ) : (
                         <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-400">

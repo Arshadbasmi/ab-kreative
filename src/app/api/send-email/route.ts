@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
+import { getServerEmailConfig } from '@/lib/server-email-config'
 
 export const dynamic = 'force-dynamic'
+
+function optionalString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
 
 // POST /api/send-email — Send a pitch email directly via SMTP
 export async function POST(request: NextRequest) {
@@ -12,7 +17,7 @@ export async function POST(request: NextRequest) {
       subject,
       body: emailBody,
       from,
-      fromName = 'AB Kreative',
+      fromName,
       smtpHost,
       smtpPort,
       smtpUser,
@@ -30,29 +35,40 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (!smtpHost || !smtpUser || !smtpPass) {
+
+    const serverConfig = getServerEmailConfig({ routeId, category })
+    const hasBrowserSmtp = Boolean(optionalString(smtpHost) && optionalString(smtpUser) && optionalString(smtpPass))
+    const effectiveSmtpHost = optionalString(smtpHost) || serverConfig?.smtpHost || ''
+    const effectiveSmtpPort = optionalString(smtpPort) || serverConfig?.smtpPort || '587'
+    const effectiveSmtpUser = optionalString(smtpUser) || serverConfig?.smtpUser || ''
+    const effectiveSmtpPass = optionalString(smtpPass) || serverConfig?.smtpPass || ''
+    const senderEmail = optionalString(from) || serverConfig?.fromEmail || effectiveSmtpUser
+    const senderName = optionalString(fromName) || serverConfig?.fromName || 'AB Kreative'
+
+    if (!effectiveSmtpHost || !effectiveSmtpUser || !effectiveSmtpPass) {
       return NextResponse.json(
-        { error: 'SMTP configuration is missing. Please configure your email settings first.' },
+        {
+          error:
+            'SMTP configuration is missing. Add server email variables in Vercel, or configure this sender in the Emails dashboard.',
+        },
         { status: 400 }
       )
     }
 
     // Create transporter
     const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: Number(smtpPort) || 587,
-      secure: Number(smtpPort) === 465,
+      host: effectiveSmtpHost,
+      port: Number(effectiveSmtpPort) || 587,
+      secure: Number(effectiveSmtpPort) === 465,
       auth: {
-        user: smtpUser,
-        pass: smtpPass,
+        user: effectiveSmtpUser,
+        pass: effectiveSmtpPass,
       },
     })
 
-    const senderEmail = from || smtpUser
-
     // Send email
     const info = await transporter.sendMail({
-      from: `"${fromName}" <${senderEmail}>`,
+      from: `"${senderName}" <${senderEmail}>`,
       to,
       bcc: bcc || senderEmail,
       replyTo: replyTo || senderEmail,
@@ -67,6 +83,7 @@ export async function POST(request: NextRequest) {
       copiedTo: bcc || senderEmail,
       routeId,
       category,
+      configSource: hasBrowserSmtp ? 'browser' : 'server',
       message: `Email sent successfully to ${to}`,
     })
   } catch (error: unknown) {
