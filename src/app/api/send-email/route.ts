@@ -46,14 +46,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const serverConfig = getServerEmailConfig({ routeId, category })
     const hasBrowserSmtp = Boolean(optionalString(smtpHost) && optionalString(smtpUser) && optionalString(smtpPass))
-    const effectiveSmtpHost = optionalString(smtpHost) || serverConfig?.smtpHost || ''
-    const effectiveSmtpPort = optionalString(smtpPort) || serverConfig?.smtpPort || '587'
-    const effectiveSmtpUser = optionalString(smtpUser) || serverConfig?.smtpUser || ''
-    const effectiveSmtpPass = optionalString(smtpPass) || serverConfig?.smtpPass || ''
-    const senderEmail = optionalString(from) || serverConfig?.fromEmail || effectiveSmtpUser
-    const senderName = optionalString(fromName) || serverConfig?.fromName || 'AB Kreative'
+    const serverConfig = getServerEmailConfig({ routeId, category })
+    const effectiveSmtpHost = hasBrowserSmtp ? optionalString(smtpHost) : serverConfig?.smtpHost || ''
+    const effectiveSmtpPort = hasBrowserSmtp ? optionalString(smtpPort) || '587' : serverConfig?.smtpPort || '587'
+    const effectiveSmtpUser = hasBrowserSmtp ? optionalString(smtpUser) : serverConfig?.smtpUser || ''
+    const effectiveSmtpPass = hasBrowserSmtp ? optionalString(smtpPass) : serverConfig?.smtpPass || ''
+    const senderEmail = hasBrowserSmtp
+      ? optionalString(from) || effectiveSmtpUser
+      : serverConfig?.fromEmail || optionalString(from) || effectiveSmtpUser
+    const senderName = hasBrowserSmtp
+      ? optionalString(fromName) || 'AB Kreative'
+      : serverConfig?.fromName || optionalString(fromName) || 'AB Kreative'
 
     if (!effectiveSmtpHost || !effectiveSmtpUser || !effectiveSmtpPass) {
       return NextResponse.json(
