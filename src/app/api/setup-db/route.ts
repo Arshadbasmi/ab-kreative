@@ -32,6 +32,10 @@ const CREATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS "Lead" (
   "experienceReq" TEXT,
   "projectType" TEXT,
   "status" TEXT NOT NULL DEFAULT 'OPEN',
+  "pitchStatus" TEXT NOT NULL DEFAULT 'NOT_SENT',
+  "pitchSentAt" DATETIME,
+  "pitchLastError" TEXT,
+  "pitchAttempts" INTEGER NOT NULL DEFAULT 0,
   "urgent" BOOLEAN NOT NULL DEFAULT 0,
   "featured" BOOLEAN NOT NULL DEFAULT 0,
   "views" INTEGER NOT NULL DEFAULT 0,
@@ -44,7 +48,15 @@ const INDEXES = [
   'CREATE INDEX IF NOT EXISTS "Lead_country_idx"  ON "Lead"("country")',
   'CREATE INDEX IF NOT EXISTS "Lead_region_idx"   ON "Lead"("region")',
   'CREATE INDEX IF NOT EXISTS "Lead_status_idx"   ON "Lead"("status")',
+  'CREATE INDEX IF NOT EXISTS "Lead_pitchStatus_idx" ON "Lead"("pitchStatus")',
   'CREATE INDEX IF NOT EXISTS "Lead_source_idx"   ON "Lead"("source")',
+]
+
+const MIGRATIONS = [
+  'ALTER TABLE "Lead" ADD COLUMN "pitchStatus" TEXT NOT NULL DEFAULT \'NOT_SENT\'',
+  'ALTER TABLE "Lead" ADD COLUMN "pitchSentAt" DATETIME',
+  'ALTER TABLE "Lead" ADD COLUMN "pitchLastError" TEXT',
+  'ALTER TABLE "Lead" ADD COLUMN "pitchAttempts" INTEGER NOT NULL DEFAULT 0',
 ]
 
 function esc(s: string | null | undefined): string {
@@ -76,6 +88,16 @@ export async function POST(request: NextRequest) {
     await libsql.execute(CREATE_TABLE_SQL)
 
     // 2. Create indexes one by one
+    for (const sql of MIGRATIONS) {
+      try {
+        await libsql.execute(sql)
+      } catch (error) {
+        if (!String(error).toLowerCase().includes('duplicate column')) {
+          throw error
+        }
+      }
+    }
+
     for (const sql of INDEXES) {
       await libsql.execute(sql)
     }

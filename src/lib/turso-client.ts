@@ -74,6 +74,10 @@ interface LeadRow {
   experienceReq: string | null
   projectType: string | null
   status: string
+  pitchStatus?: string
+  pitchSentAt?: string | null
+  pitchLastError?: string | null
+  pitchAttempts?: number
   urgent: number
   featured: number
   views: number
@@ -158,13 +162,82 @@ export async function tursoFindLeadById(id: string): Promise<LeadRow | null> {
   return result.rows.length > 0 ? rowToLead(result.rows[0] as Record<string, unknown>) : null
 }
 
+export async function tursoEnsurePitchColumns(): Promise<void> {
+  const db = getClient()
+  const migrations = [
+    'ALTER TABLE "Lead" ADD COLUMN "pitchStatus" TEXT NOT NULL DEFAULT \'NOT_SENT\'',
+    'ALTER TABLE "Lead" ADD COLUMN "pitchSentAt" DATETIME',
+    'ALTER TABLE "Lead" ADD COLUMN "pitchLastError" TEXT',
+    'ALTER TABLE "Lead" ADD COLUMN "pitchAttempts" INTEGER NOT NULL DEFAULT 0',
+  ]
+
+  for (const sql of migrations) {
+    try {
+      await db.execute(sql)
+    } catch (error) {
+      if (!String(error).toLowerCase().includes('duplicate column')) {
+        throw error
+      }
+    }
+  }
+
+  await db.execute('CREATE INDEX IF NOT EXISTS "Lead_pitchStatus_idx" ON "Lead"("pitchStatus")')
+}
+
+export async function tursoFindUnsentPitchLeads(limit: number): Promise<LeadRow[]> {
+  const db = getClient()
+  const result = await db.execute({
+    sql: `SELECT * FROM "Lead"
+      WHERE "status" = 'OPEN'
+        AND COALESCE("pitchStatus", 'NOT_SENT') != 'SENT'
+        AND "clientEmail" IS NOT NULL
+        AND "clientEmail" != ''
+      ORDER BY "urgent" DESC, "createdAt" DESC
+      LIMIT @limit`,
+    args: { limit: Math.max(1, Math.min(limit, 25)) },
+  })
+
+  return result.rows.map(rowToLead)
+}
+
+export async function tursoMarkLeadPitchSent(id: string): Promise<void> {
+  const db = getClient()
+  await db.execute({
+    sql: `UPDATE "Lead"
+      SET "pitchStatus" = 'SENT',
+          "pitchSentAt" = @pitchSentAt,
+          "pitchLastError" = NULL,
+          "pitchAttempts" = COALESCE("pitchAttempts", 0) + 1,
+          "updatedAt" = @pitchSentAt
+      WHERE "id" = @id`,
+    args: { id, pitchSentAt: new Date().toISOString() },
+  })
+}
+
+export async function tursoMarkLeadPitchFailed(id: string, error: string): Promise<void> {
+  const db = getClient()
+  await db.execute({
+    sql: `UPDATE "Lead"
+      SET "pitchStatus" = 'FAILED',
+          "pitchLastError" = @error,
+          "pitchAttempts" = COALESCE("pitchAttempts", 0) + 1,
+          "updatedAt" = @updatedAt
+      WHERE "id" = @id`,
+    args: {
+      id,
+      error: error.slice(0, 500),
+      updatedAt: new Date().toISOString(),
+    },
+  })
+}
+
 export async function tursoCreateLead(data: Record<string, unknown>): Promise<LeadRow> {
   const db = getClient()
   const id = data.id ? String(data.id) : `cl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const now = new Date().toISOString()
 
   await db.execute({
-    sql: `INSERT INTO "Lead" ("id","title","description","category","subcategory","country","city","region","budgetMin","budgetMax","currency","timeline","skills","source","sourceUrl","clientName","clientCompany","clientEmail","clientPhone","clientAddress","clientLinkedin","clientWebsite","experienceReq","projectType","status","urgent","featured","views","createdAt","updatedAt") VALUES (@id,@title,@description,@category,@subcategory,@country,@city,@region,@budgetMin,@budgetMax,@currency,@timeline,@skills,@source,@sourceUrl,@clientName,@clientCompany,@clientEmail,@clientPhone,@clientAddress,@clientLinkedin,@clientWebsite,@experienceReq,@projectType,@status,@urgent,@featured,0,@createdAt,@updatedAt)`,
+    sql: `INSERT INTO "Lead" ("id","title","description","category","subcategory","country","city","region","budgetMin","budgetMax","currency","timeline","skills","source","sourceUrl","clientName","clientCompany","clientEmail","clientPhone","clientAddress","clientLinkedin","clientWebsite","experienceReq","projectType","status","pitchStatus","pitchAttempts","urgent","featured","views","createdAt","updatedAt") VALUES (@id,@title,@description,@category,@subcategory,@country,@city,@region,@budgetMin,@budgetMax,@currency,@timeline,@skills,@source,@sourceUrl,@clientName,@clientCompany,@clientEmail,@clientPhone,@clientAddress,@clientLinkedin,@clientWebsite,@experienceReq,@projectType,@status,@pitchStatus,0,@urgent,@featured,0,@createdAt,@updatedAt)`,
     args: {
       id,
       title: String(data.title),
@@ -191,6 +264,7 @@ export async function tursoCreateLead(data: Record<string, unknown>): Promise<Le
       experienceReq: data.experienceReq ? String(data.experienceReq) : null,
       projectType: data.projectType ? String(data.projectType) : null,
       status: String(data.status || 'OPEN'),
+      pitchStatus: String(data.pitchStatus || 'NOT_SENT'),
       urgent: data.urgent ? 1 : 0,
       featured: 0,
       createdAt: now,

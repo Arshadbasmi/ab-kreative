@@ -66,7 +66,7 @@ export function LeadCard({
   const { toast } = useToast()
   const pitchSent = useSyncExternalStore(
     subscribePitchSent,
-    () => isLeadPitchSent(lead.id),
+    () => lead.pitchStatus === 'SENT' || isLeadPitchSent(lead.id),
     () => false,
   )
 

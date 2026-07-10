@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { getServerEmailConfig } from '@/lib/server-email-config'
+import {
+  initTursoClient,
+  tursoEnsurePitchColumns,
+  tursoMarkLeadPitchFailed,
+  tursoMarkLeadPitchSent,
+} from '@/lib/turso-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +16,8 @@ function optionalString(value: unknown): string {
 
 // POST /api/send-email — Send a pitch email directly via SMTP
 export async function POST(request: NextRequest) {
+  let leadIdForStatus = ''
+
   try {
     const body = await request.json()
     const {
@@ -24,9 +32,11 @@ export async function POST(request: NextRequest) {
       smtpPass,
       routeId,
       category,
+      leadId,
       bcc,
       replyTo,
     } = body
+    leadIdForStatus = optionalString(leadId)
 
     // Validate required fields
     if (!to || !subject || !emailBody) {
@@ -76,6 +86,18 @@ export async function POST(request: NextRequest) {
       text: emailBody,
     })
 
+    if (leadIdForStatus && process.env.TURSO_DATABASE_URL) {
+      try {
+        const ready = await initTursoClient()
+        if (ready) {
+          await tursoEnsurePitchColumns()
+          await tursoMarkLeadPitchSent(leadIdForStatus)
+        }
+      } catch (statusError) {
+        console.error('Pitch sent status update failed:', statusError)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       messageId: info.messageId,
@@ -89,6 +111,16 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error'
     console.error('POST /api/send-email error:', msg)
+
+    try {
+      if (leadIdForStatus && process.env.TURSO_DATABASE_URL) {
+        const ready = await initTursoClient()
+        if (ready) {
+          await tursoEnsurePitchColumns()
+          await tursoMarkLeadPitchFailed(leadIdForStatus, msg)
+        }
+      }
+    } catch {}
 
     // Return user-friendly error messages for common SMTP issues
     if (msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT')) {

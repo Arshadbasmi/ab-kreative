@@ -144,6 +144,10 @@ export type Lead = {
   experienceReq: string | null
   projectType: string | null
   status: string
+  pitchStatus?: string
+  pitchSentAt?: string | null
+  pitchLastError?: string | null
+  pitchAttempts?: number
   urgent: boolean
   featured: boolean
   views: number

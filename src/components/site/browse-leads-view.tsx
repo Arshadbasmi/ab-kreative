@@ -326,6 +326,7 @@ export function BrowseLeadsView() {
         smtpPass: emailConfig.smtpPass,
         routeId: emailConfig.id,
         category: lead.category,
+        leadId: lead.id,
         bcc: emailConfig.email,
         replyTo: emailConfig.email,
       }),

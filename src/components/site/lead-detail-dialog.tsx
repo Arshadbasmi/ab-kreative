@@ -138,7 +138,7 @@ export function LeadDetailDialog({
   const catColor = lead ? getCatColorClass(lead.category) : null
   const pitchSent = useSyncExternalStore(
     subscribePitchSent,
-    () => (lead?.id ? isLeadPitchSent(lead.id) : false),
+    () => lead?.pitchStatus === 'SENT' || (lead?.id ? isLeadPitchSent(lead.id) : false),
     () => false,
   )
 

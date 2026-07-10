@@ -34,6 +34,10 @@ model Lead {
   experienceReq   String?
   projectType     String?
   status          String   @default("OPEN") // OPEN | IN_PROGRESS | CLOSED
+  pitchStatus     String   @default("NOT_SENT") // NOT_SENT | SENT | FAILED
+  pitchSentAt     DateTime?
+  pitchLastError  String?
+  pitchAttempts   Int      @default(0)
   urgent          Boolean  @default(false)
   featured        Boolean  @default(false)
   views           Int      @default(0)
@@ -44,5 +48,6 @@ model Lead {
   @@index([country])
   @@index([region])
   @@index([status])
+  @@index([pitchStatus])
   @@index([source])
 }
